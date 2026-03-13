@@ -93,7 +93,8 @@ def create_app(config_class=Config):
         
         roles_added = False
         for role_data in roles:
-            if not Role.query.filter_by(name=role_data['name']).first():
+            # Case-insensitive check to prevent duplicates
+            if not Role.query.filter(db.func.lower(Role.name) == role_data['name'].lower()).first():
                 db.session.add(Role(**role_data))
                 roles_added = True
         

@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -22,8 +22,8 @@ const RoleBasedRedirect = () => {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div></div>
   if (!user) return <Navigate to="/login" replace />
 
-  if (user.role === 'mentor') return <Navigate to="/mentor" replace />
-  if (user.role === 'admin') return <Navigate to="/admin" replace />
+  if (user.role?.toLowerCase() === 'mentor') return <Navigate to="/mentor" replace />
+  if (user.role?.toLowerCase() === 'admin') return <Navigate to="/admin" replace />
   return <Navigate to="/dashboard" replace />
 }
 

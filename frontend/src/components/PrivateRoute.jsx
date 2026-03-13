@@ -16,7 +16,7 @@ const PrivateRoute = ({ children, requiredRole }) => {
     return <Navigate to="/login" replace />
   }
 
-  if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
+  if (requiredRole && user.role?.toLowerCase() !== requiredRole.toLowerCase() && user.role?.toLowerCase() !== 'admin') {
     return <Navigate to="/" replace />
   }
 

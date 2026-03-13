@@ -28,7 +28,7 @@ def register():
             return jsonify({'error': 'User with this email already exists'}), 400
         
         # Get or create role
-        role = Role.query.filter_by(name=data['role'].lower()).first()
+        role = Role.query.filter(db.func.lower(Role.name) == data['role'].lower()).first()
         if not role:
             # Create default roles if they don't exist
             if data['role'].lower() == 'student':

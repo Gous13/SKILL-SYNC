@@ -33,9 +33,9 @@ const Register = () => {
     if (result.success) {
       toast.success('Registration successful!')
       const user = result.user
-      if (user.role === 'mentor') {
+      if (user.role?.toLowerCase() === 'mentor') {
         navigate('/mentor')
-      } else if (user.role === 'admin') {
+      } else if (user.role?.toLowerCase() === 'admin') {
         navigate('/admin')
       } else {
         navigate('/dashboard')
