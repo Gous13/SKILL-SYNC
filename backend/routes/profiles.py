@@ -9,6 +9,7 @@ from models.user import User
 from models.profile import StudentProfile
 from models.student_skill import StudentSkill
 from services.nlp_service import get_nlp_service
+import json
 
 profiles_bp = Blueprint('profiles', __name__)
 # nlp_service initialized lazily inside routes
@@ -82,7 +83,6 @@ def create_profile():
         )
         
         # Generate embeddings (ONLY skills/interests/experience; availability is NOT embedded)
-        import json
         nlp_service = get_nlp_service()
         skills_emb = nlp_service.encode_text(profile.skills_description or '')
         interests_emb = nlp_service.encode_text(profile.interests_description or '')
@@ -105,6 +105,19 @@ def create_profile():
         
     except Exception as e:
         db.session.rollback()
+        
+        # Determine if this is a UNIQUE constraint error (idempotency support)
+        # This handles cases where network timeouts lead to retries
+        error_msg = str(e)
+        if 'UNIQUE constraint failed' in error_msg and 'student_profiles.user_id' in error_msg:
+            # Re-query the student profile in a new attempt
+            existing = StudentProfile.query.filter_by(user_id=user_id).first()
+            if existing:
+                return jsonify({
+                    'message': 'Profile already exists (returned existing)',
+                    'profile': existing.to_dict()
+                }), 200
+        
         return jsonify({'error': str(e)}), 500
 
 @profiles_bp.route('', methods=['GET'])

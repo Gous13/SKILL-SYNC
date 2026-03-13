@@ -11,6 +11,9 @@ from models.project_task import ProjectTask
 from services.nlp_service import get_nlp_service
 from utils.decorators import mentor_or_admin_required
 from datetime import datetime
+import json
+from flask import current_app
+from gevent import spawn
 
 projects_bp = Blueprint('projects', __name__)
 # nlp_service initialized lazily inside routes
@@ -45,20 +48,38 @@ def create_project():
         project_text = f"{project.description} {project.required_skills}"
         nlp_service = get_nlp_service()
         embedding = nlp_service.encode_text(project_text)
-        import json
         project.description_embedding = json.dumps(embedding.tolist())
         
         db.session.add(project)
         db.session.commit()
         
-        # Auto-compute similarities for all students to enable recommendations
+        # Auto-compute similarities in background to prevent request timeout on Render
+        # Pass the app object to the background task to avoid circular imports and context loss
+        app = current_app._get_current_object()
+        spawn(background_compute_similarities, app, project.id)
+        
+        return jsonify({
+            'message': 'Project created successfully. AI matching started in background.',
+            'project': project.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+def background_compute_similarities(app, project_id):
+    """Heavy NLP task offloaded from request cycle"""
+    with app.app_context():
         try:
-            from routes.matching import compute_similarities
-            # Call the similarity computation function directly
+            from models.project import Project
             from models.profile import StudentProfile
             from models.matching import SimilarityScore
-            from services.nlp_service import get_nlp_service
-            
+            # Use the global get_nlp_service instead of local import
+
+            project = Project.query.get(project_id)
+            if not project:
+                return
+
             profiles = StudentProfile.query.all()
             project_embedding = json.loads(project.description_embedding)
             
@@ -114,19 +135,10 @@ def create_project():
                     db.session.add(similarity)
             
             db.session.commit()
+            print(f"Background: Completed similarities for project {project_id}")
         except Exception as e:
-            # Don't fail project creation if similarity computation fails
-            print(f"Warning: Failed to compute similarities for new project: {e}")
+            print(f"Background Error: {e}")
             db.session.rollback()
-        
-        return jsonify({
-            'message': 'Project created successfully. Similarities computed for recommendations.',
-            'project': project.to_dict()
-        }), 201
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
 
 @projects_bp.route('/projects', methods=['GET'])
 @jwt_required()
