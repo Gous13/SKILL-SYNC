@@ -2,7 +2,7 @@
 Student profile routes
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
 from models.user import User
@@ -10,6 +10,7 @@ from models.profile import StudentProfile
 from models.student_skill import StudentSkill
 from services.nlp_service import get_nlp_service
 import json
+from gevent import spawn
 
 profiles_bp = Blueprint('profiles', __name__)
 # nlp_service initialized lazily inside routes
@@ -82,24 +83,19 @@ def create_profile():
             gpa=gpa
         )
         
-        # Generate embeddings (ONLY skills/interests/experience; availability is NOT embedded)
-        nlp_service = get_nlp_service()
-        skills_emb = nlp_service.encode_text(profile.skills_description or '')
-        interests_emb = nlp_service.encode_text(profile.interests_description or '')
-        experience_emb = nlp_service.encode_text(profile.experience_description or '')
-
-        profile.skills_embedding = json.dumps(skills_emb.tolist())
-        profile.interests_embedding = json.dumps(interests_emb.tolist())
-        profile.experience_embedding = json.dumps(experience_emb.tolist())
-        profile.is_complete = True
+        profile.is_complete = False  # Mark as incomplete until AI finishes
         
         db.session.add(profile)
         db.session.flush()
         _sync_skills_to_student_skills(user_id, profile.skills_description)
         db.session.commit()
 
+        # Offload AI work to background
+        app = current_app._get_current_object()
+        spawn(background_compute_profile_embeddings, app, profile.id)
+
         return jsonify({
-            'message': 'Profile created successfully',
+            'message': 'Profile created successfully. AI processing started in background.',
             'profile': profile.to_dict()
         }), 201
         
@@ -184,23 +180,17 @@ def update_profile():
             except (ValueError, TypeError):
                 profile.gpa = None
         
-        # Regenerate embeddings (ONLY skills/interests/experience; availability is NOT embedded)
-        import json
-        nlp_service = get_nlp_service()
-        skills_emb = nlp_service.encode_text(profile.skills_description or '')
-        interests_emb = nlp_service.encode_text(profile.interests_description or '')
-        experience_emb = nlp_service.encode_text(profile.experience_description or '')
-
-        profile.skills_embedding = json.dumps(skills_emb.tolist())
-        profile.interests_embedding = json.dumps(interests_emb.tolist())
-        profile.experience_embedding = json.dumps(experience_emb.tolist())
-
         if 'skills_description' in data:
             _sync_skills_to_student_skills(user_id, profile.skills_description)
+        
         db.session.commit()
 
+        # Offload AI work to background
+        app = current_app._get_current_object()
+        spawn(background_compute_profile_embeddings, app, profile.id)
+
         return jsonify({
-            'message': 'Profile updated successfully',
+            'message': 'Profile update received. AI processing started in background.',
             'profile': profile.to_dict()
         }), 200
         
@@ -230,3 +220,29 @@ def get_all_profiles():
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def background_compute_profile_embeddings(app, profile_id):
+    """Heavy NLP task offloaded to background"""
+    with app.app_context():
+        try:
+            profile = StudentProfile.query.get(profile_id)
+            if not profile:
+                return
+
+            nlp_service = get_nlp_service()
+            print(f"Background: Starting embeddings for profile {profile_id}")
+            
+            skills_emb = nlp_service.encode_text(profile.skills_description or '')
+            interests_emb = nlp_service.encode_text(profile.interests_description or '')
+            experience_emb = nlp_service.encode_text(profile.experience_description or '')
+
+            profile.skills_embedding = json.dumps(skills_emb.tolist())
+            profile.interests_embedding = json.dumps(interests_emb.tolist())
+            profile.experience_embedding = json.dumps(experience_emb.tolist())
+            profile.is_complete = True
+            
+            db.session.commit()
+            print(f"Background: Completed embeddings for profile {profile_id}")
+        except Exception as e:
+            print(f"Background Error (Profile {profile_id}): {e}")
+            db.session.rollback()

@@ -44,17 +44,10 @@ def create_project():
             deadline=datetime.fromisoformat(data['deadline']) if data.get('deadline') else None
         )
         
-        # Generate embedding
-        project_text = f"{project.description} {project.required_skills}"
-        nlp_service = get_nlp_service()
-        embedding = nlp_service.encode_text(project_text)
-        project.description_embedding = json.dumps(embedding.tolist())
-        
         db.session.add(project)
         db.session.commit()
         
-        # Auto-compute similarities in background to prevent request timeout on Render
-        # Pass the app object to the background task to avoid circular imports and context loss
+        # Auto-compute embedding and similarities in background to prevent timeout
         app = current_app._get_current_object()
         spawn(background_compute_similarities, app, project.id)
         
@@ -79,6 +72,16 @@ def background_compute_similarities(app, project_id):
             project = Project.query.get(project_id)
             if not project:
                 return
+
+            nlp_service = get_nlp_service()
+            
+            # Generate project embedding in background if missing
+            if not project.description_embedding:
+                print(f"Background: Generating embedding for project {project_id}")
+                project_text = f"{project.description} {project.required_skills}"
+                embedding = nlp_service.encode_text(project_text)
+                project.description_embedding = json.dumps(embedding.tolist())
+                db.session.commit()
 
             profiles = StudentProfile.query.all()
             project_embedding = json.loads(project.description_embedding)
@@ -296,18 +299,15 @@ def create_hackathon():
             status=data.get('status', 'upcoming')
         )
         
-        # Generate embedding
-        hackathon_text = f"{hackathon.description} {hackathon.required_skills} {hackathon.theme}"
-        nlp_service = get_nlp_service()
-        embedding = nlp_service.encode_text(hackathon_text)
-        import json
-        hackathon.description_embedding = json.dumps(embedding.tolist())
-        
         db.session.add(hackathon)
         db.session.commit()
         
+        # Generate embedding in background
+        app = current_app._get_current_object()
+        spawn(background_compute_hackathon_embeddings, app, hackathon.id)
+        
         return jsonify({
-            'message': 'Hackathon created successfully',
+            'message': 'Hackathon created successfully. AI processing started in background.',
             'hackathon': hackathon.to_dict()
         }), 201
         
@@ -341,3 +341,27 @@ def get_hackathon(hackathon_id):
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def background_compute_hackathon_embeddings(app, hackathon_id):
+    """Heavy NLP task offloaded to background"""
+    with app.app_context():
+        try:
+            from models.project import Hackathon
+            from services.nlp_service import get_nlp_service
+            import json
+
+            hackathon = Hackathon.query.get(hackathon_id)
+            if not hackathon:
+                return
+
+            print(f"Background: Starting embedding for hackathon {hackathon_id}")
+            hackathon_text = f"{hackathon.description} {hackathon.required_skills} {hackathon.theme}"
+            nlp_service = get_nlp_service()
+            embedding = nlp_service.encode_text(hackathon_text)
+            hackathon.description_embedding = json.dumps(embedding.tolist())
+            
+            db.session.commit()
+            print(f"Background: Completed embedding for hackathon {hackathon_id}")
+        except Exception as e:
+            print(f"Background Error (Hackathon {hackathon_id}): {e}")
+            db.session.rollback()
