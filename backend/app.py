@@ -151,13 +151,6 @@ def create_app(config_class=Config):
         
         logger.info(f"Instructor terminated exam for student {student_id} in {skill}")
             
-    # Pre-load NLP model
-    try:
-        from services.nlp_service import get_nlp_service
-        get_nlp_service()
-    except Exception as e:
-        logger.error(f"Failed to pre-load NLP model: {e}")
-
     return app
 
 if __name__ == '__main__':

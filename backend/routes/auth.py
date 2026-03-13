@@ -40,7 +40,7 @@ def register():
             else:
                 return jsonify({'error': 'Invalid role. Must be student, mentor, or admin'}), 400
             db.session.add(role)
-            db.session.commit()
+            db.session.flush() # Use flush instead of commit to get the ID without ending the transaction
         
         # Create user
         user = User(
@@ -50,9 +50,8 @@ def register():
             role_id=role.id
         )
         user.set_password(data['password'])
-        
         db.session.add(user)
-        db.session.commit()
+        db.session.flush()
         
         # Log registration
         log = SystemLog(
@@ -63,6 +62,8 @@ def register():
             ip_address=request.remote_addr
         )
         db.session.add(log)
+        
+        # Final single commit for all operations
         db.session.commit()
         
         # Generate token (identity must be a string)
