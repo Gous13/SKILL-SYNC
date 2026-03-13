@@ -15,7 +15,7 @@ services:
       - key: FLASK_ENV
         value: production
       - key: DATABASE_URL
-        value: sqlite:///synapselink.db
+        value: sqlite:////opt/render/project/src/instance/synapselink.db
     disk:
       name: synapselink-disk
       mountPath: /opt/render/project/src/instance
