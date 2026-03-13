@@ -1,3 +1,6 @@
+from gevent import monkey
+monkey.patch_all()
+
 """
 SKILLCREW Backend - Main Application Entry Point
 Flask API server for intelligent student collaboration and peer matching
