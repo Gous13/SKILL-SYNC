@@ -13,7 +13,7 @@ from utils.decorators import mentor_or_admin_required
 from datetime import datetime
 
 projects_bp = Blueprint('projects', __name__)
-nlp_service = get_nlp_service()
+# nlp_service initialized lazily inside routes
 
 @projects_bp.route('/projects', methods=['POST'])
 @jwt_required()
@@ -43,6 +43,7 @@ def create_project():
         
         # Generate embedding
         project_text = f"{project.description} {project.required_skills}"
+        nlp_service = get_nlp_service()
         embedding = nlp_service.encode_text(project_text)
         import json
         project.description_embedding = json.dumps(embedding.tolist())
@@ -285,6 +286,7 @@ def create_hackathon():
         
         # Generate embedding
         hackathon_text = f"{hackathon.description} {hackathon.required_skills} {hackathon.theme}"
+        nlp_service = get_nlp_service()
         embedding = nlp_service.encode_text(hackathon_text)
         import json
         hackathon.description_embedding = json.dumps(embedding.tolist())

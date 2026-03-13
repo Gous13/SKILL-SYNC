@@ -11,7 +11,7 @@ from models.student_skill import StudentSkill
 from services.nlp_service import get_nlp_service
 
 profiles_bp = Blueprint('profiles', __name__)
-nlp_service = get_nlp_service()
+# nlp_service initialized lazily inside routes
 
 
 def _sync_skills_to_student_skills(user_id, skills_description):
@@ -83,6 +83,7 @@ def create_profile():
         
         # Generate embeddings (ONLY skills/interests/experience; availability is NOT embedded)
         import json
+        nlp_service = get_nlp_service()
         skills_emb = nlp_service.encode_text(profile.skills_description or '')
         interests_emb = nlp_service.encode_text(profile.interests_description or '')
         experience_emb = nlp_service.encode_text(profile.experience_description or '')
@@ -172,6 +173,7 @@ def update_profile():
         
         # Regenerate embeddings (ONLY skills/interests/experience; availability is NOT embedded)
         import json
+        nlp_service = get_nlp_service()
         skills_emb = nlp_service.encode_text(profile.skills_description or '')
         interests_emb = nlp_service.encode_text(profile.interests_description or '')
         experience_emb = nlp_service.encode_text(profile.experience_description or '')

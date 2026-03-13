@@ -18,9 +18,7 @@ from utils.decorators import student_required
 import json
 
 matching_bp = Blueprint('matching', __name__)
-nlp_service = get_nlp_service()
-optimization_service = OptimizationService()
-explanation_service = ExplanationService()
+# Services initialized lazily inside routes
 
 def _compute_profile_project_similarity(project_embedding, profile):
     """
@@ -38,6 +36,7 @@ def _compute_profile_project_similarity(project_embedding, profile):
 
     # Lazily compute missing embeddings
     if skills_emb is None:
+        nlp_service = get_nlp_service()
         skills_emb = nlp_service.encode_text(profile.skills_description or '').tolist()
         profile.skills_embedding = json.dumps(skills_emb)
     if interests_emb is None:
@@ -122,6 +121,7 @@ def _auto_form_teams_for_project(project_id):
                 project_embedding = json.loads(project.description_embedding) if project.description_embedding else None
                 if not project_embedding:
                     project_text = f"{project.description} {project.required_skills}"
+                    nlp_service = get_nlp_service()
                     project_embedding = nlp_service.encode_text(project_text).tolist()
                     project.description_embedding = json.dumps(project_embedding)
 
@@ -145,6 +145,7 @@ def _auto_form_teams_for_project(project_id):
             'max_team_size': project.max_team_size,
             'preferred_team_size': project.preferred_team_size
         }
+        optimization_service = OptimizationService()
         team_assignments = optimization_service.form_teams(
             joined_profiles, project, similarity_scores, constraints
         )
@@ -232,6 +233,7 @@ def compute_similarities(project_id):
         if not project_embedding:
             # Generate if missing
             project_text = f"{project.description} {project.required_skills}"
+            nlp_service = get_nlp_service()
             project_embedding = nlp_service.encode_text(project_text).tolist()
             project.description_embedding = json.dumps(project_embedding)
             db.session.commit()
@@ -330,6 +332,7 @@ def form_teams(project_id):
                 similarity_scores[profile.id] = 0.5  # Default
         
         # Form teams using optimization
+        optimization_service = OptimizationService()
         team_assignments = optimization_service.form_teams(
             profiles, project, similarity_scores, constraints
         )
@@ -416,6 +419,7 @@ def get_explanation(similarity_id):
         
         if not explanation:
             # Generate explanation
+            explanation_service = ExplanationService()
             explanation_data = explanation_service.generate_explanation(profile, project, similarity)
             
             explanation = MatchExplanation(
@@ -456,6 +460,7 @@ def get_explanation_by_project(project_id):
         profile_embedding = json.loads(profile.skills_embedding) if profile.skills_embedding else None
         
         if project_embedding and profile_embedding:
+            nlp_service = get_nlp_service()
             overall_sim = nlp_service.compute_similarity(project_embedding, profile_embedding)
         else:
             overall_sim = 0.5
@@ -469,6 +474,7 @@ def get_explanation_by_project(project_id):
         )
         
         # Generate explanation
+        explanation_service = ExplanationService()
         explanation_data = explanation_service.generate_explanation(profile, project, temp_similarity)
         
         return jsonify({
@@ -525,6 +531,7 @@ def get_recommendations():
                 continue
             
             # Extract project required skills
+            nlp_service = get_nlp_service()
             project_skills = set(nlp_service.extract_keywords(project.required_skills or project.description or '', top_n=15))
             project_skills_lower = {s.lower() for s in project_skills}
 
@@ -551,6 +558,7 @@ def get_recommendations():
                 profile_embedding = json.loads(profile.skills_embedding) if profile.skills_embedding else None
                 
                 if project_embedding and profile_embedding:
+                    nlp_service = get_nlp_service()
                     overall_sim = nlp_service.compute_similarity(project_embedding, profile_embedding)
                 else:
                     # If no embeddings, use skill overlap as similarity
