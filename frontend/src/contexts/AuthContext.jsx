@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', access_token)
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
       setUser(user)
-      return { success: true }
+      return { success: true, user }
     } catch (error) {
       return {
         success: false,
@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', access_token)
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
       setUser(user)
-      return { success: true }
+      return { success: true, user }
     } catch (error) {
       return {
         success: false,

@@ -20,7 +20,14 @@ const Login = () => {
 
     if (result.success) {
       toast.success('Login successful!')
-      navigate('/dashboard')
+      const user = result.user
+      if (user.role === 'mentor') {
+        navigate('/mentor')
+      } else if (user.role === 'admin') {
+        navigate('/admin')
+      } else {
+        navigate('/dashboard')
+      }
     } else {
       toast.error(result.error)
     }
@@ -77,7 +84,7 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-          </div>
+            </div>
 
             <button
               type="submit"
@@ -98,14 +105,14 @@ const Login = () => {
             </button>
 
             <div className="text-center pt-2">
-            <Link
-              to="/register"
+              <Link
+                to="/register"
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
-            >
+              >
                 Don't have an account? <span className="underline">Register here</span>
-            </Link>
-          </div>
-        </form>
+              </Link>
+            </div>
+          </form>
         </div>
 
         {/* Footer */}

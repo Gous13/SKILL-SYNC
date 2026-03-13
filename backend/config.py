@@ -14,7 +14,7 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', 86400))
     
     # Database configuration
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///skillcrew.db')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///synapselink.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Flask settings

@@ -32,7 +32,14 @@ const Register = () => {
 
     if (result.success) {
       toast.success('Registration successful!')
-      navigate('/dashboard')
+      const user = result.user
+      if (user.role === 'mentor') {
+        navigate('/mentor')
+      } else if (user.role === 'admin') {
+        navigate('/admin')
+      } else {
+        navigate('/dashboard')
+      }
     } else {
       toast.error(result.error)
     }
@@ -44,7 +51,7 @@ const Register = () => {
         {/* Logo and Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-600 to-primary-400 rounded-2xl shadow-lg mb-4">
-              <UserPlus className="w-8 h-8 text-white" />
+            <UserPlus className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Create your account
@@ -137,7 +144,7 @@ const Register = () => {
                 <option value="mentor">Mentor</option>
                 <option value="admin">Admin</option>
               </select>
-          </div>
+            </div>
 
             <button
               type="submit"
@@ -158,14 +165,14 @@ const Register = () => {
             </button>
 
             <div className="text-center pt-2">
-            <Link
-              to="/login"
+              <Link
+                to="/login"
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
-            >
+              >
                 Already have an account? <span className="underline">Sign in</span>
-            </Link>
-          </div>
-        </form>
+              </Link>
+            </div>
+          </form>
         </div>
       </div>
     </div>
