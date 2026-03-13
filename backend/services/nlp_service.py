@@ -8,15 +8,24 @@ import os
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Singleton instance
+import threading
+import logging
+
+# Set up logger for this service
+logger = logging.getLogger(__name__)
+
+# Singleton instance and lock for thread-safe initialization
 _nlp_service_instance = None
+_nlp_service_lock = threading.Lock()
 
 def get_nlp_service(model_name='all-MiniLM-L6-v2'):
-    """Get singleton NLP service instance"""
+    """Get singleton NLP service instance (thread-safe)"""
     global _nlp_service_instance
     
     if _nlp_service_instance is None:
-        _nlp_service_instance = NLPService(model_name)
+        with _nlp_service_lock:
+            if _nlp_service_instance is None:
+                _nlp_service_instance = NLPService(model_name)
     
     return _nlp_service_instance
 
@@ -35,28 +44,26 @@ class NLPService:
         logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
         warnings.filterwarnings('ignore', category=UserWarning)
         
+        # Check if we are in a sub-process (Re-initialization check)
+        logger.info(f"Initializing NLPService with model: {model_name} (PID: {os.getpid()})")
         print(f"Loading Sentence-BERT model: {model_name}")
         try:
             # Load model - it will use cache if available
             # Network errors are expected if offline, but cached model should work
             self.model = SentenceTransformer(model_name, device='cpu')
             print("Model loaded successfully")
+            logger.info("SentenceTransformer model loaded successfully")
         except Exception as e:
             error_msg = str(e)
+            logger.error(f"Failed to load SentenceTransformer: {error_msg}")
             # Check if it's just a network timeout (model might still be usable)
             if 'timeout' in error_msg.lower() or 'resolve' in error_msg.lower() or 'connection' in error_msg.lower():
                 print("Network timeout detected, but model may still be loaded from cache.")
-                print("Model should work for encoding. If errors occur, check model cache.")
                 # Model might still be loaded, try to use it
-                try:
-                    # Check if model was actually loaded despite the error
-                    if hasattr(self, 'model') and self.model is not None:
-                        print("Using cached model instance.")
-                    else:
-                        raise
-                except:
+                if hasattr(self, 'model') and self.model is not None:
+                    print("Using cached model instance.")
+                else:
                     print(f"Warning: Model loading had network issues: {error_msg}")
-                    print("The application will continue, but NLP features may not work until model is loaded.")
                     raise Exception("NLP model failed to load. Please check internet connection for first-time download, or ensure model is cached.")
             else:
                 raise
