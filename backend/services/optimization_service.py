@@ -2,7 +2,7 @@
 Optimization Service using Google OR-Tools for team formation
 """
 
-from ortools.sat.python import cp_model
+# ortools moved inside form_teams to prevent blocking authentication routes
 import json
 import numpy as np
 
@@ -40,6 +40,9 @@ class OptimizationService:
         """
         if constraints is None:
             constraints = {}
+        
+        # Lazy import to prevent blocking server startup
+        from ortools.sat.python import cp_model
         
         num_students = len(profiles)
         if num_students == 0:

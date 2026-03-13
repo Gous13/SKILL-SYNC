@@ -5,8 +5,7 @@ NLP Service using Sentence-BERT for semantic encoding
 import json
 import numpy as np
 import os
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+# Heavy ML imports moved inside functions to prevent blocking authentication routes
 
 import threading
 import logging
@@ -48,8 +47,10 @@ class NLPService:
         logger.info(f"Initializing NLPService with model: {model_name} (PID: {os.getpid()})")
         print(f"Loading Sentence-BERT model: {model_name}")
         try:
+            # Lazy import to prevent blocking server startup
+            from sentence_transformers import SentenceTransformer
+            
             # Load model - it will use cache if available
-            # Network errors are expected if offline, but cached model should work
             self.model = SentenceTransformer(model_name, device='cpu')
             print("Model loaded successfully")
             logger.info("SentenceTransformer model loaded successfully")
@@ -120,6 +121,7 @@ class NLPService:
         embedding1 = np.array(embedding1).reshape(1, -1)
         embedding2 = np.array(embedding2).reshape(1, -1)
         
+        from sklearn.metrics.pairwise import cosine_similarity
         similarity = cosine_similarity(embedding1, embedding2)[0][0]
         # Normalize to 0-1 range (cosine similarity is already -1 to 1, but typically 0-1)
         similarity = max(0, min(1, (similarity + 1) / 2))
@@ -149,6 +151,7 @@ class NLPService:
         
         candidate_array = np.array(candidate_list)
         
+        from sklearn.metrics.pairwise import cosine_similarity
         similarities = cosine_similarity(query_embedding, candidate_array)[0]
         # Normalize to 0-1 range
         similarities = np.clip((similarities + 1) / 2, 0, 1)
