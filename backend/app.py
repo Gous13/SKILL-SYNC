@@ -76,9 +76,30 @@ def create_app(config_class=Config):
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(exam_bp, url_prefix='/api/exam')
     
-    # Create tables
+    # Create tables and initialize data
     with app.app_context():
+        # Ensure instance folder exists for SQLite
+        os.makedirs(app.instance_path, exist_ok=True)
+        
         db.create_all()
+        
+        # Initialize default roles if they don't exist
+        from models.user import Role
+        roles = [
+            {'name': 'student', 'description': 'Student user'},
+            {'name': 'mentor', 'description': 'Mentor/Faculty user'},
+            {'name': 'admin', 'description': 'Administrator'}
+        ]
+        
+        roles_added = False
+        for role_data in roles:
+            if not Role.query.filter_by(name=role_data['name']).first():
+                db.session.add(Role(**role_data))
+                roles_added = True
+        
+        if roles_added:
+            db.session.commit()
+            app.logger.info("Initialized default roles")
     
     @app.route('/api/health')
     def health():

@@ -18,5 +18,5 @@ services:
         value: sqlite:///synapselink.db
     disk:
       name: synapselink-disk
-      mountPath: /opt/render/project/src
+      mountPath: /opt/render/project/src/instance
       sizeGB: 1
