@@ -23,7 +23,7 @@ const ExamMentorPage = () => {
     const [mcqOptions, setMcqOptions] = useState({ A: '', B: '', C: '', D: '' });
     const [correctAnswer, setCorrectAnswer] = useState('A');
     const [questionMarks, setQuestionMarks] = useState(10);
-    
+
     // Coding question fields
     const [codingProblem, setCodingProblem] = useState('');
     const [sampleInput, setSampleInput] = useState('');
@@ -86,7 +86,9 @@ const ExamMentorPage = () => {
             return;
         }
 
-        const socket = io('http://localhost:5000', {
+        const backendUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
+
+        const socket = io(backendUrl, {
             transports: ['polling', 'websocket'],
             reconnection: true,
             reconnectionAttempts: 5,
@@ -111,7 +113,7 @@ const ExamMentorPage = () => {
         socket.on('proctor_frame', (data) => {
             console.log('[Socket] Received frame from:', data.studentName, 'ID:', data.studentId, 'Action:', data.action);
             const studentKey = data.studentId || data.studentName;
-            
+
             // Handle exam completion (student submits or exam ends)
             if (data.action === 'COMPLETED') {
                 // Add to removed list so they don't reappear
@@ -120,7 +122,7 @@ const ExamMentorPage = () => {
                     setRemovedStudentIds(newRemovedIds);
                     localStorage.setItem('removedStudentIds', JSON.stringify([...newRemovedIds]));
                 }
-                
+
                 setLiveStreams(prev => {
                     const next = { ...prev };
                     delete next[studentKey];
@@ -129,7 +131,7 @@ const ExamMentorPage = () => {
                 fetchResults();
                 return;
             }
-            
+
             // Handle exam termination
             if (data.action === 'TERMINATED') {
                 // Add to removed list
@@ -138,7 +140,7 @@ const ExamMentorPage = () => {
                     setRemovedStudentIds(newRemovedIds);
                     localStorage.setItem('removedStudentIds', JSON.stringify([...newRemovedIds]));
                 }
-                
+
                 setLiveStreams(prev => {
                     const next = { ...prev };
                     delete next[studentKey];
@@ -147,12 +149,12 @@ const ExamMentorPage = () => {
                 fetchResults();
                 return;
             }
-            
+
             // Skip if student is manually removed from monitoring (use ref for current value)
             if (data.studentId && removedStudentIdsRef.current.has(data.studentId)) {
                 return;
             }
-            
+
             // Update live stream
             setLiveStreams(prev => ({
                 ...prev,
@@ -238,7 +240,7 @@ const ExamMentorPage = () => {
         const newRemovedIds = new Set([...removedStudentIds, student.user_id]);
         setRemovedStudentIds(newRemovedIds);
         localStorage.setItem('removedStudentIds', JSON.stringify([...newRemovedIds]));
-        
+
         // Remove from live streams
         setLiveStreams(prev => {
             const next = { ...prev };
@@ -246,7 +248,7 @@ const ExamMentorPage = () => {
             delete next[student.user_name];
             return next;
         });
-        
+
         // Remove from displayed students
         setStudents(prev => prev.filter(s => s.user_id !== student.user_id));
     };
@@ -292,10 +294,10 @@ const ExamMentorPage = () => {
         if (!window.confirm(`Are you sure you want to terminate the exam for ${student.user_name}? This action cannot be undone.`)) {
             return;
         }
-        
+
         try {
             const token = localStorage.getItem('token');
-            
+
             // Send terminate via socket
             if (socketRef.current) {
                 socketRef.current.emit('terminate_student', {
@@ -305,7 +307,7 @@ const ExamMentorPage = () => {
                     reason: 'Terminated by mentor'
                 });
             }
-            
+
             // Also call API to mark as terminated
             const res = await fetch(`/api/exam/attempt/${student.attempt_id}/terminate`, {
                 method: 'POST',
@@ -318,15 +320,15 @@ const ExamMentorPage = () => {
                     logs: []
                 })
             });
-            
+
             if (res.ok) {
                 alert(`Exam terminated for ${student.user_name}`);
-                
+
                 // Add to removed list so they don't reappear
                 const newRemovedIds = new Set([...removedStudentIds, student.user_id]);
                 setRemovedStudentIds(newRemovedIds);
                 localStorage.setItem('removedStudentIds', JSON.stringify([...newRemovedIds]));
-                
+
                 // Remove from live streams
                 setLiveStreams(prev => {
                     const next = { ...prev };
@@ -334,7 +336,7 @@ const ExamMentorPage = () => {
                     delete next[student.user_name];
                     return next;
                 });
-                
+
                 fetchResults();
             } else {
                 const err = await res.json();
@@ -402,7 +404,7 @@ const ExamMentorPage = () => {
         if (!window.confirm('Are you sure you want to delete this question?')) {
             return;
         }
-        
+
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(`/api/exam/questions/${questionId}`, {
@@ -521,10 +523,10 @@ const ExamMentorPage = () => {
     const handleApproveAi = async (id) => {
         const question = aiQuestions.find(q => q.id === id);
         if (!question) return;
-        
+
         try {
             const token = localStorage.getItem('token');
-            
+
             // Update the question status to approved in the database
             const res = await fetch(`/api/exam/ai-questions/${id}`, {
                 method: 'PUT',
@@ -540,7 +542,7 @@ const ExamMentorPage = () => {
                     type: question.type || 'Coding'
                 })
             });
-            
+
             if (res.ok) {
                 setAiQuestions(aiQuestions.map(q => q.id === id ? { ...q, status: 'approved' } : q));
                 alert('Question approved successfully!');
@@ -567,7 +569,7 @@ const ExamMentorPage = () => {
                     status: 'rejected'
                 })
             });
-            
+
             if (res.ok) {
                 setAiQuestions(aiQuestions.map(q => q.id === id ? { ...q, status: 'rejected' } : q));
             } else {
@@ -582,47 +584,47 @@ const ExamMentorPage = () => {
 
     const generateAiQuestions = async () => {
         const mockQuestions = [
-            { 
-                title: 'Reverse a String', 
-                skill: 'Python', 
-                type: 'Coding', 
-                status: 'pending', 
+            {
+                title: 'Reverse a String',
+                skill: 'Python',
+                type: 'Coding',
+                status: 'pending',
                 problem_statement: 'Write a function that reverses a string. The input is a string and you should return the reversed string.',
                 test_cases: [{ input: '"hello"', expected_output: '"olleh"' }, { input: '"world"', expected_output: '"dlrow"' }],
                 marks: 10
             },
-            { 
-                title: 'Find Maximum in Array', 
-                skill: 'Python', 
-                type: 'Coding', 
-                status: 'pending', 
+            {
+                title: 'Find Maximum in Array',
+                skill: 'Python',
+                type: 'Coding',
+                status: 'pending',
                 problem_statement: 'Write a function that finds the maximum element in an array of integers.',
                 test_cases: [{ input: '[1, 5, 3]', expected_output: '5' }, { input: '[-1, -5, -3]', expected_output: '-1' }],
                 marks: 10
             },
-            { 
-                title: 'Binary Search Implementation', 
-                skill: 'Python', 
-                type: 'Coding', 
-                status: 'pending', 
+            {
+                title: 'Binary Search Implementation',
+                skill: 'Python',
+                type: 'Coding',
+                status: 'pending',
                 problem_statement: 'Implement binary search to find a target element in a sorted array. Return the index if found, -1 otherwise.',
                 test_cases: [{ input: '[1,2,3,4,5], 3', expected_output: '2' }, { input: '[1,2,3,4,5], 6', expected_output: '-1' }],
                 marks: 15
             },
-            { 
-                title: 'Linked List Reversal', 
-                skill: 'Python', 
-                type: 'Coding', 
-                status: 'pending', 
+            {
+                title: 'Linked List Reversal',
+                skill: 'Python',
+                type: 'Coding',
+                status: 'pending',
                 problem_statement: 'Reverse a singly linked list. Return the head of the reversed list.',
                 test_cases: [{ input: '[1,2,3,4,5]', expected_output: '[5,4,3,2,1]' }],
                 marks: 15
             },
-            { 
-                title: 'Merge Two Sorted Arrays', 
-                skill: 'Python', 
-                type: 'Coding', 
-                status: 'pending', 
+            {
+                title: 'Merge Two Sorted Arrays',
+                skill: 'Python',
+                type: 'Coding',
+                status: 'pending',
                 problem_statement: 'Merge two sorted arrays into one sorted array.',
                 test_cases: [{ input: '[1,3,5], [2,4,6]', expected_output: '[1,2,3,4,5,6]' }],
                 marks: 10
@@ -631,7 +633,7 @@ const ExamMentorPage = () => {
 
         try {
             const savedQuestions = [];
-            
+
             for (const q of mockQuestions) {
                 const res = await api.post('/exam/ai-questions', {
                     skill: q.skill,
@@ -643,12 +645,12 @@ const ExamMentorPage = () => {
                     marks: q.marks,
                     is_ai_generated: true
                 });
-                
+
                 if (res.data) {
                     savedQuestions.push(res.data);
                 }
             }
-            
+
             if (savedQuestions.length > 0) {
                 setAiQuestions(prev => [...prev, ...savedQuestions]);
             } else {
@@ -680,8 +682,8 @@ const ExamMentorPage = () => {
 
             if (res.ok) {
                 const updated = await res.json();
-                setAiQuestions(aiQuestions.map(q => 
-                    q.id === editingAiQuestion 
+                setAiQuestions(aiQuestions.map(q =>
+                    q.id === editingAiQuestion
                         ? { ...q, title: editAiTitle, skill: editAiSkill }
                         : q
                 ));
@@ -689,13 +691,13 @@ const ExamMentorPage = () => {
         } catch (err) {
             console.error("Failed to save edit:", err);
             // Fallback to local state
-            setAiQuestions(aiQuestions.map(q => 
-                q.id === editingAiQuestion 
+            setAiQuestions(aiQuestions.map(q =>
+                q.id === editingAiQuestion
                     ? { ...q, title: editAiTitle, skill: editAiSkill }
                     : q
             ));
         }
-        
+
         setEditingAiQuestion(null);
         setEditAiTitle('');
         setEditAiSkill('');
@@ -891,7 +893,7 @@ const ExamMentorPage = () => {
                             {qType === 'Coding' && (
                                 <div className="mt-4 p-4 border border-green-500/30 bg-green-900/20 rounded-lg space-y-4">
                                     <h4 className="text-sm font-bold text-gray-200 mb-3">Coding Problem Details</h4>
-                                    
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-300 mb-1">Problem Statement *</label>
                                         <textarea
@@ -902,7 +904,7 @@ const ExamMentorPage = () => {
                                             className="w-full border border-gray-700 p-3 rounded focus:ring-2 focus:ring-primary-500 bg-gray-900 text-white placeholder-gray-500 h-24"
                                         />
                                     </div>
-                                    
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-300 mb-1">Sample Input</label>
@@ -1005,11 +1007,10 @@ const ExamMentorPage = () => {
                                         <div className="flex flex-col flex-1">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="font-bold text-white">{q.title}</span>
-                                                <span className={`text-xs px-2 py-0.5 rounded font-bold ${
-                                                    q.status === 'approved' ? 'bg-green-900/50 text-green-400 border border-green-500/30' :
-                                                    q.status === 'pending' ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-500/30' :
-                                                    'bg-red-900/50 text-red-400 border border-red-500/30'
-                                                }`}>
+                                                <span className={`text-xs px-2 py-0.5 rounded font-bold ${q.status === 'approved' ? 'bg-green-900/50 text-green-400 border border-green-500/30' :
+                                                        q.status === 'pending' ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-500/30' :
+                                                            'bg-red-900/50 text-red-400 border border-red-500/30'
+                                                    }`}>
                                                     {q.status}
                                                 </span>
                                             </div>
@@ -1086,12 +1087,12 @@ const ExamMentorPage = () => {
                                         <div className="mt-4 md:mt-0 flex items-center gap-3">
                                             {q.status === 'pending' ? (
                                                 <>
-                                                    <button 
+                                                    <button
                                                         onClick={() => {
                                                             setEditingAiQuestion(q.id);
                                                             setEditAiTitle(q.title);
                                                             setEditAiSkill(q.skill);
-                                                        }} 
+                                                        }}
                                                         className="flex items-center text-sm font-bold text-gray-400 hover:text-primary-400 bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded border border-gray-700 transition"
                                                     >
                                                         <Edit3 className="w-4 h-4 mr-1" /> Edit
@@ -1676,7 +1677,7 @@ const ExamMentorPage = () => {
                                 <input
                                     type="text"
                                     value={editQuestionData.title}
-                                    onChange={(e) => setEditQuestionData({...editQuestionData, title: e.target.value})}
+                                    onChange={(e) => setEditQuestionData({ ...editQuestionData, title: e.target.value })}
                                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
                                 />
                             </div>
@@ -1686,7 +1687,7 @@ const ExamMentorPage = () => {
                                     <input
                                         type="text"
                                         value={editQuestionData.skill}
-                                        onChange={(e) => setEditQuestionData({...editQuestionData, skill: e.target.value})}
+                                        onChange={(e) => setEditQuestionData({ ...editQuestionData, skill: e.target.value })}
                                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
                                     />
                                 </div>
@@ -1695,7 +1696,7 @@ const ExamMentorPage = () => {
                                     <input
                                         type="number"
                                         value={editQuestionData.marks}
-                                        onChange={(e) => setEditQuestionData({...editQuestionData, marks: parseInt(e.target.value)})}
+                                        onChange={(e) => setEditQuestionData({ ...editQuestionData, marks: parseInt(e.target.value) })}
                                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
                                     />
                                 </div>
@@ -1704,7 +1705,7 @@ const ExamMentorPage = () => {
                                 <label className="block text-sm font-medium text-gray-400 mb-1">Type</label>
                                 <select
                                     value={editQuestionData.type}
-                                    onChange={(e) => setEditQuestionData({...editQuestionData, type: e.target.value})}
+                                    onChange={(e) => setEditQuestionData({ ...editQuestionData, type: e.target.value })}
                                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
                                 >
                                     <option value="MCQ">MCQ</option>
@@ -1716,7 +1717,7 @@ const ExamMentorPage = () => {
                                 <label className="block text-sm font-medium text-gray-400 mb-1">Problem Statement</label>
                                 <textarea
                                     value={editQuestionData.problem_statement}
-                                    onChange={(e) => setEditQuestionData({...editQuestionData, problem_statement: e.target.value})}
+                                    onChange={(e) => setEditQuestionData({ ...editQuestionData, problem_statement: e.target.value })}
                                     rows={4}
                                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
                                 />
@@ -1728,8 +1729,8 @@ const ExamMentorPage = () => {
                                         value={JSON.stringify(editQuestionData.options, null, 2)}
                                         onChange={(e) => {
                                             try {
-                                                setEditQuestionData({...editQuestionData, options: JSON.parse(e.target.value)});
-                                            } catch {}
+                                                setEditQuestionData({ ...editQuestionData, options: JSON.parse(e.target.value) });
+                                            } catch { }
                                         }}
                                         rows={4}
                                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white font-mono text-sm"
@@ -1738,7 +1739,7 @@ const ExamMentorPage = () => {
                                     <input
                                         type="text"
                                         value={editQuestionData.correct_answer}
-                                        onChange={(e) => setEditQuestionData({...editQuestionData, correct_answer: e.target.value})}
+                                        onChange={(e) => setEditQuestionData({ ...editQuestionData, correct_answer: e.target.value })}
                                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
                                         placeholder="e.g., A"
                                     />
@@ -1751,8 +1752,8 @@ const ExamMentorPage = () => {
                                         value={JSON.stringify(editQuestionData.test_cases, null, 2)}
                                         onChange={(e) => {
                                             try {
-                                                setEditQuestionData({...editQuestionData, test_cases: JSON.parse(e.target.value)});
-                                            } catch {}
+                                                setEditQuestionData({ ...editQuestionData, test_cases: JSON.parse(e.target.value) });
+                                            } catch { }
                                         }}
                                         rows={4}
                                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white font-mono text-sm"

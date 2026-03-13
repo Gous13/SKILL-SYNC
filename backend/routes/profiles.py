@@ -17,15 +17,29 @@ profiles_bp = Blueprint('profiles', __name__)
 
 
 def _sync_skills_to_student_skills(user_id, skills_description):
-    """Sync comma-separated skills to student_skills table (unverified if new)"""
+    """Sync comma-separated skills to student_skills table (case-insensitive)"""
     if not skills_description or not skills_description.strip():
         return
-    skills = [s.strip() for s in skills_description.split(',') if s.strip()]
+    
+    # Use a set for unique skills in this request
+    skills = {s.strip() for s in skills_description.split(',') if s.strip()}
+    
     for name in skills:
-        existing = StudentSkill.query.filter_by(user_id=user_id, skill_name=name).first()
+        # Check for case-insensitive match
+        existing = StudentSkill.query.filter(
+            StudentSkill.user_id == user_id,
+            db.func.lower(StudentSkill.skill_name) == name.lower()
+        ).first()
+        
         if not existing:
-            sk = StudentSkill(user_id=user_id, skill_name=name, status='unverified')
-            db.session.add(sk)
+            try:
+                sk = StudentSkill(user_id=user_id, skill_name=name, status='unverified')
+                db.session.add(sk)
+                db.session.flush() # Flush to catch constraints early
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Error syncing skill {name}: {str(e)}")
+                # Continue with other skills
 
 @profiles_bp.route('', methods=['POST'])
 @jwt_required()

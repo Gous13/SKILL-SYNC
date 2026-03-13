@@ -86,7 +86,7 @@ const ExamPage = () => {
     let fetchedQuestions = [];
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:5000/api/exam/questions?skill=${encodeURIComponent(skillToValuate)}`, {
+      const res = await fetch(`/api/exam/questions?skill=${encodeURIComponent(skillToValuate)}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -877,7 +877,12 @@ const ExamPage = () => {
     setupAudioMonitoring();
     startContinuousFaceMonitoring();
 
-    socketRef.current = io('http://localhost:5000', {
+    const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin.replace('vercel.app', 'onrender.com');
+    // Note: Render and Vercel URLs are different, usually handled by environment variables or a direct mapping logic if not provided.
+    // For simplicity, we'll try to connect to the configured proxy/api base implicitly if possible, or use a default logic.
+    const backendUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
+
+    socketRef.current = io(backendUrl, {
       transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
@@ -897,9 +902,9 @@ const ExamPage = () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
-        
+
         console.log('[Stream] Video readyState:', video.readyState, 'paused:', video.paused);
-        
+
         if (video.readyState < 2) {
           console.log('[Stream] Video not ready yet');
           return;
@@ -907,7 +912,7 @@ const ExamPage = () => {
 
         if (canvas.width !== 320) canvas.width = 320;
         if (canvas.height !== 240) canvas.height = 240;
-        
+
         try {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         } catch (e) {
@@ -916,7 +921,7 @@ const ExamPage = () => {
         }
 
         const frameData = canvas.toDataURL('image/jpeg', 0.5);
-        
+
         if (!frameData || frameData.length < 100) {
           console.log('[Stream] Empty frame, skipping');
           return;
@@ -1067,9 +1072,9 @@ const ExamPage = () => {
       };
 
       if (attemptId) {
-        res = await fetch(`http://localhost:5000/api/exam/attempt/${attemptId}/submit`, fetchOptions);
+        res = await fetch(`/api/exam/attempt/${attemptId}/submit`, fetchOptions);
       } else {
-        res = await fetch('http://localhost:5000/api/exam/submit', fetchOptions);
+        res = await fetch('/api/exam/submit', fetchOptions);
       }
 
       if (!res) {
@@ -1095,7 +1100,7 @@ const ExamPage = () => {
       let errorMessage = 'Error submitting exam. Please try again.';
 
       if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-        errorMessage = 'Cannot connect to server. Please ensure the backend is running at http://localhost:5000';
+        errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
       } else if (err.message) {
         errorMessage = 'Error submitting exam: ' + err.message;
       }

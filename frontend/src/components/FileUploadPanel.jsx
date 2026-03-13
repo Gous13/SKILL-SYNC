@@ -52,7 +52,7 @@ const FileUploadPanel = ({ teamId, isMentor, userId }) => {
   const handleDownload = async (fileId, fileName) => {
     try {
       const token = localStorage.getItem('token')
-      const base = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+      const base = import.meta.env.VITE_API_URL || '/api'
       const res = await fetch(`${base}/teams/${teamId}/files/${fileId}/download`, {
         headers: { Authorization: `Bearer ${token}` }
       })
