@@ -529,6 +529,12 @@ def get_recommendations():
             # Skip projects user has already joined
             if project.id in joined_project_ids:
                 continue
+
+            # Skip projects that have reached their capacity (total members across all teams)
+            from models.team import TeamMember, Team
+            total_members = db.session.query(db.func.count(TeamMember.id)).join(Team).filter(Team.project_id == project.id).scalar() or 0
+            if total_members >= (project.max_team_size or 5):
+                continue
             
             # Extract project required skills
             nlp_service = get_nlp_service()

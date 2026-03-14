@@ -146,11 +146,20 @@ def background_compute_similarities(app, project_id):
 @projects_bp.route('/projects', methods=['GET'])
 @jwt_required()
 def get_projects():
-    """Get all projects"""
+    """Get all projects (skipping those at maximum capacity for students)"""
     try:
-        projects = Project.query.all()
+        from models.team import Team, TeamMember
+        projects = Project.query.filter_by(status='open').all()
+        
+        filtered_projects = []
+        for project in projects:
+            # Count current members
+            total_members = db.session.query(db.func.count(TeamMember.id)).join(Team).filter(Team.project_id == project.id).scalar() or 0
+            if total_members < (project.max_team_size or 5):
+                filtered_projects.append(project.to_dict(include_teams=True))
+                
         return jsonify({
-            'projects': [project.to_dict(include_teams=True) for project in projects]
+            'projects': filtered_projects
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
