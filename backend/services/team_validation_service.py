@@ -41,10 +41,10 @@ def validate_team_skills(team_id):
     if not project:
         return {'error': 'Project not found'}
 
-    nlp = get_nlp_service()
-    required_raw = (project.required_skills or '') + ' ' + (project.description or '')
-    required_keywords = nlp.extract_keywords(required_raw, top_n=15)
-    required_skills = list(set(k.lower() for k in required_keywords if len(k) > 2))
+    # Parse required skills directly from the comma-separated field
+    raw = (project.required_skills or '').strip()
+    required_skills = [s.strip().lower() for s in raw.split(',') if s.strip()] if raw else []
+
     if not required_skills:
         return {
             'team_id': team_id,
@@ -55,12 +55,14 @@ def validate_team_skills(team_id):
             'warnings': []
         }
 
-    # Get each member's skills (do not over-restrict by status to avoid missing genuine skills)
+    # Get each member's VERIFIED skills only (passed or verified status)
     member_skills = {}
     for member in team.members or []:
         user_id = member.user_id
-        # Consider all recorded skills for this user.
-        skills = StudentSkill.query.filter_by(user_id=user_id).all()
+        skills = StudentSkill.query.filter(
+            StudentSkill.user_id == user_id,
+            StudentSkill.status.in_(['passed', 'verified'])
+        ).all()
         member_skills[user_id] = [
             {'skill_name': s.skill_name, 'score': s.assessment_score or 0}
             for s in skills
@@ -104,6 +106,7 @@ def validate_team_skills(team_id):
         'confidence_score': round(confidence, 2),
         'warnings': warnings
     }
+
 
 
 def validate_project_teams(project_id):
