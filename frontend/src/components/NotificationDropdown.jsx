@@ -62,9 +62,9 @@ const NotificationDropdown = ({ unreadCount = 0 }) => {
 
     const type = (notification.type || 'message').toLowerCase()
 
-    // Group chat notification — go to messages page (group chats visible in sidebar)
+    // Group chat notification — navigate directly to that group chat
     if (notification.group_chat_id) {
-      navigate('/messages')
+      navigate(`/messages?group=${notification.group_chat_id}`)
       setOpen(false)
       return
     }
@@ -122,8 +122,8 @@ const NotificationDropdown = ({ unreadCount = 0 }) => {
                   type="button"
                   onClick={() => setActiveType(type)}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${activeType === type
-                      ? 'bg-primary-600 text-white shadow-sm'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                    ? 'bg-primary-600 text-white shadow-sm'
+                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                     }`}
                 >
                   {TYPE_CONFIG[type].label}
