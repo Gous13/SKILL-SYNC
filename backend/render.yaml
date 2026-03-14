@@ -11,11 +11,18 @@ services:
       - key: HF_HUB_OFFLINE
         value: "1"
       - key: JWT_SECRET_KEY
-        generateValue: true
+        # IMPORTANT: Set this manually in Render Dashboard → Environment Variables.
+        # DO NOT use generateValue:true — it creates a new random key on every restart,
+        # which invalidates all existing JWT tokens and causes "Login Failed" errors.
+        # Use a long random string like: skillcrew-jwt-secret-2024-xyz-abc-do-not-rotate
+        sync: false
       - key: FLASK_ENV
         value: production
       - key: DATABASE_URL
         value: sqlite:////opt/render/project/src/instance/synapselink.db
+      - key: FRONTEND_URL
+        # Set this to your Vercel frontend URL, e.g. https://skill-sync.vercel.app
+        sync: false
     disk:
       name: synapselink-disk
       mountPath: /opt/render/project/src/instance
