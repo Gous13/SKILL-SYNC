@@ -40,6 +40,7 @@ const ExamMentorPage = () => {
     const [editQuestionData, setEditQuestionData] = useState({ title: '', skill: '', type: '', marks: 10, problem_statement: '', options: {}, correct_answer: '', test_cases: [] });
     const [questionStatusFilter, setQuestionStatusFilter] = useState('all');
 
+    const [students, setStudents] = useState([]); // exam results for monitor & evaluate tabs
     const [aiQuestions, setAiQuestions] = useState([]);
     const [removedStudentIds, setRemovedStudentIds] = useState(() => {
         const saved = localStorage.getItem('removedStudentIds');
@@ -1008,8 +1009,8 @@ const ExamMentorPage = () => {
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="font-bold text-white">{q.title}</span>
                                                 <span className={`text-xs px-2 py-0.5 rounded font-bold ${q.status === 'approved' ? 'bg-green-900/50 text-green-400 border border-green-500/30' :
-                                                        q.status === 'pending' ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-500/30' :
-                                                            'bg-red-900/50 text-red-400 border border-red-500/30'
+                                                    q.status === 'pending' ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-500/30' :
+                                                        'bg-red-900/50 text-red-400 border border-red-500/30'
                                                     }`}>
                                                     {q.status}
                                                 </span>
