@@ -41,6 +41,7 @@ const ExamMentorPage = () => {
     const [questionStatusFilter, setQuestionStatusFilter] = useState('all');
 
     const [students, setStudents] = useState([]); // exam results for monitor & evaluate tabs
+    const [finalizedIds, setFinalizedIds] = useState(new Set()); // IDs hidden after finalize
     const [aiQuestions, setAiQuestions] = useState([]);
     const [removedStudentIds, setRemovedStudentIds] = useState(() => {
         const saved = localStorage.getItem('removedStudentIds');
@@ -297,8 +298,6 @@ const ExamMentorPage = () => {
         }
 
         try {
-            const token = localStorage.getItem('token');
-
             // Send terminate via socket
             if (socketRef.current) {
                 socketRef.current.emit('terminate_student', {
@@ -309,43 +308,35 @@ const ExamMentorPage = () => {
                 });
             }
 
-            // Also call API to mark as terminated
-            const res = await fetch(`/api/exam/attempt/${student.attempt_id}/terminate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
+            // Call API to mark as terminated using the configured axios instance
+            if (student.attempt_id) {
+                await api.post(`/exam/attempt/${student.attempt_id}/terminate`, {
                     flags: student.proctoring_flags || 0,
                     logs: []
-                })
+                });
+            }
+
+            alert(`Exam terminated for ${student.user_name}`);
+
+            // Add to removed list so they don't reappear
+            const newRemovedIds = new Set([...removedStudentIds, student.user_id]);
+            setRemovedStudentIds(newRemovedIds);
+            localStorage.setItem('removedStudentIds', JSON.stringify([...newRemovedIds]));
+
+            // Remove from live streams
+            setLiveStreams(prev => {
+                const next = { ...prev };
+                delete next[student.user_id];
+                delete next[student.user_name];
+                return next;
             });
 
-            if (res.ok) {
-                alert(`Exam terminated for ${student.user_name}`);
-
-                // Add to removed list so they don't reappear
-                const newRemovedIds = new Set([...removedStudentIds, student.user_id]);
-                setRemovedStudentIds(newRemovedIds);
-                localStorage.setItem('removedStudentIds', JSON.stringify([...newRemovedIds]));
-
-                // Remove from live streams
-                setLiveStreams(prev => {
-                    const next = { ...prev };
-                    delete next[student.user_id];
-                    delete next[student.user_name];
-                    return next;
-                });
-
-                fetchResults();
-            } else {
-                const err = await res.json();
-                alert('Failed to terminate: ' + err.error);
-            }
+            // Remove from students list immediately
+            setStudents(prev => prev.filter(s => s.user_id !== student.user_id));
+            fetchResults();
         } catch (err) {
             console.error("Failed to terminate student:", err);
-            alert('Failed to terminate student');
+            alert('Failed to terminate: ' + (err.response?.data?.error || err.message));
         }
     };
 
@@ -489,35 +480,20 @@ const ExamMentorPage = () => {
 
     const finalizeAutoScore = async (resultId) => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`/api/exam/evaluate/${resultId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ feedback: 'Auto-score finalized automatically.' })
+            const res = await api.post(`/exam/evaluate/${resultId}`, {
+                feedback: 'Auto-score finalized automatically.'
             });
-            if (res.ok) {
-                // Refresh latest results and go back to list so mentor sees the update
+            if (res.status === 200 || res.data) {
+                // Hide student from evaluate list immediately
+                setFinalizedIds(prev => new Set([...prev, resultId]));
                 await fetchResults();
                 alert('Auto-score finalized successfully.');
                 setSelectedStudent(null);
-            } else {
-                let message = 'Failed to finalize auto-score.';
-                try {
-                    const data = await res.json();
-                    if (data?.error) {
-                        message += ' ' + data.error;
-                    }
-                } catch {
-                    // ignore JSON parse errors
-                }
-                alert(message);
             }
         } catch (err) {
+            const message = err.response?.data?.error || 'Failed to finalize auto-score. Please try again.';
+            alert(message);
             console.error("Error finalizing auto-score:", err);
-            alert('Network error while finalizing auto-score. Please try again.');
         }
     };
 
@@ -1493,7 +1469,7 @@ const ExamMentorPage = () => {
                                 <p className="text-gray-400 mb-8">Review auto-graded submissions, check incident logs, and manually approve or override final scores.</p>
 
                                 <div className="space-y-6">
-                                    {students.filter(s => s.status === 'COMPLETED' || s.status === 'Graded').map(student => (
+                                    {students.filter(s => (s.status === 'COMPLETED' || s.status === 'Graded') && !finalizedIds.has(s.id)).map(student => (
                                         <div key={student.id} className="border border-gray-800 bg-gray-950 p-6 rounded-xl flex flex-col lg:flex-row justify-between lg:items-center gap-6 shadow-sm hover:shadow-md hover:border-gray-700 transition">
                                             <div className="flex-1">
                                                 <h3 className="font-bold text-xl text-white">{student.user_name}</h3>
@@ -1536,7 +1512,7 @@ const ExamMentorPage = () => {
                                             </div>
                                         </div>
                                     ))}
-                                    {students.filter(s => s.status === 'COMPLETED' || s.status === 'Graded').length === 0 && (
+                                    {students.filter(s => (s.status === 'COMPLETED' || s.status === 'Graded') && !finalizedIds.has(s.id)).length === 0 && (
                                         <div className="text-center py-12 text-gray-500">
                                             <CheckSquare className="w-12 h-12 mx-auto mb-4 opacity-30" />
                                             <p>No completed exams to evaluate</p>
