@@ -45,6 +45,10 @@ def validate_team_skills(team_id):
     raw = (project.required_skills or '').strip()
     required_skills = [s.strip().lower() for s in raw.split(',') if s.strip()] if raw else []
 
+    # Noise filter: Remove generic words that are not actual technical skills
+    noise_words = {'developers', 'need', 'team', 'member', 'verified', 'role', 'looking', 'for', 'skills', 'experience'}
+    required_skills = [s for s in required_skills if s not in noise_words]
+
     if not required_skills:
         return {
             'team_id': team_id,
