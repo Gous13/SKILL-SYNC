@@ -23,19 +23,11 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
-    # Initialize extensions - CORS with explicit allowed origins
-    # NOTE: Using origins="*" with supports_credentials=True is rejected by browsers.
-    # JWT is passed via Authorization header (not cookies), so supports_credentials is not needed.
-    frontend_url = os.environ.get('FRONTEND_URL', '')
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-    ]
-    if frontend_url:
-        allowed_origins.append(frontend_url)
-    
+    # Initialize extensions - CORS open to all origins
+    # JWT is passed via Authorization header (not cookies), so supports_credentials is NOT needed.
+    # origins="*" without supports_credentials is valid and browser-safe.
     CORS(app, resources={r"/api/*": {
-        "origins": allowed_origins,
+        "origins": "*",
         "allow_headers": ["Content-Type", "Authorization"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     }})
