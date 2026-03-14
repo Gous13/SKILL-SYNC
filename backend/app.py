@@ -34,6 +34,14 @@ def create_app(config_class=Config):
     jwt = JWTManager(app)
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*")
+
+    # Bulletproof CORS fallback — inject headers on every response
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        return response
     
     # Test CORS endpoint
     @app.route('/api/test-cors')
