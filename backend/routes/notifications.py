@@ -1,13 +1,3 @@
-"""
-Notification routes
-
-Provides a unified notification feed backed by the existing Message model.
-This is intentionally minimal and non-breaking:
-- Reuses the 'messages' table (Message model) as the notifications store
-- Adds optional server-side filtering by notification type
-- Does not change any existing message or task behavior
-"""
-
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -15,6 +5,8 @@ from extensions import db
 from models.message import Message
 from models.project_task import ProjectTask
 from models.project import Project
+from models.group_chat import GroupChat, GroupChatMember, GroupMessage
+from models.group_chat_read_state import GroupChatReadState
 
 
 notifications_bp = Blueprint("notifications", __name__)
@@ -25,6 +17,7 @@ notifications_bp = Blueprint("notifications", __name__)
 def get_notifications():
   """
   Get notifications for the current user.
+  Includes both direct messages AND unread group chat messages.
 
   Optional query params:
   - type: 'message' | 'task' | 'project'
@@ -37,6 +30,9 @@ def get_notifications():
     if limit <= 0 or limit > 200:
       limit = 50
 
+    items = []
+
+    # --- Direct messages ---
     query = Message.query.filter(
       Message.receiver_id == current_user_id,
       Message.deleted_by_receiver_at == None,  # noqa: E711
@@ -71,15 +67,12 @@ def get_notifications():
           "title": p.title,
         }
 
-    items = []
     for m in messages:
       base = m.to_dict(include_sender=True)
-      # Ensure type/related_id are always present in payload
       base_type = (m.type or "message").lower()
       base["type"] = base_type
       base["related_id"] = m.related_id
 
-      # Optional, type-specific metadata to help the frontend route correctly
       meta = {}
       if base_type == "task" and m.related_id and m.related_id in tasks_by_id:
         meta["task"] = tasks_by_id[m.related_id]
@@ -89,8 +82,46 @@ def get_notifications():
       base["meta"] = meta
       items.append(base)
 
+    # --- Group chat messages (unread only) ---
+    # Only include if type filter isn't set to task/project (group msgs are type=message)
+    if notif_type in ("", "message", "all"):
+      memberships = GroupChatMember.query.filter_by(user_id=current_user_id).all()
+      for mem in memberships:
+        gc = mem.group_chat
+        if not gc:
+          continue
+        rs = GroupChatReadState.query.filter_by(
+          group_chat_id=gc.id, user_id=current_user_id
+        ).first()
+        last_read_id = rs.last_read_message_id if rs else 0
+
+        unread_group_msgs = GroupMessage.query.filter(
+          GroupMessage.group_chat_id == gc.id,
+          GroupMessage.id > last_read_id,
+          GroupMessage.sender_id != current_user_id
+        ).order_by(GroupMessage.created_at.desc()).limit(10).all()
+
+        for gm in unread_group_msgs:
+          sender = gm.sender
+          items.append({
+            "id": f"group_{gm.id}",
+            "type": "message",
+            "content": f"[{gc.project.title if gc.project else 'Group'}] {gm.content}",
+            "created_at": gm.created_at.isoformat() if gm.created_at else None,
+            "is_read": False,
+            "sender_id": gm.sender_id,
+            "sender": sender.to_dict() if sender else None,
+            "group_chat_id": gc.id,
+            "meta": {}
+          })
+
+    # Sort all notifications by date descending and apply limit
+    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    items = items[:limit]
+
     return jsonify({"notifications": items}), 200
   except Exception as e:
     db.session.rollback()
     return jsonify({"error": str(e)}), 500
+
 

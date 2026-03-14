@@ -55,12 +55,19 @@ const NotificationDropdown = ({ unreadCount = 0 }) => {
   }
 
   const handleNavigate = (notification) => {
-    // Mark as read when clicked
-    if (notification.id) {
+    // Mark as read when clicked (only for direct messages with numeric IDs)
+    if (notification.id && typeof notification.id === 'number') {
       markAsReadMutation.mutate(notification.id)
     }
 
     const type = (notification.type || 'message').toLowerCase()
+
+    // Group chat notification — go to messages page (group chats visible in sidebar)
+    if (notification.group_chat_id) {
+      navigate('/messages')
+      setOpen(false)
+      return
+    }
 
     if (type === 'message') {
       if (notification.sender_id) {
@@ -114,11 +121,10 @@ const NotificationDropdown = ({ unreadCount = 0 }) => {
                   key={type}
                   type="button"
                   onClick={() => setActiveType(type)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
-                    activeType === type
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${activeType === type
                       ? 'bg-primary-600 text-white shadow-sm'
                       : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
+                    }`}
                 >
                   {TYPE_CONFIG[type].label}
                 </button>
