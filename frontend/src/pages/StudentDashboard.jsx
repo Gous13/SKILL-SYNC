@@ -69,6 +69,21 @@ const StudentDashboard = () => {
     enabled: !!profile && !!user?.id
   })
 
+  // Fetch exam results to check if any assessment has been graded by mentor
+  const { data: examResults } = useQuery({
+    queryKey: ['exam-results'],
+    queryFn: async () => {
+      const res = await api.get('/exam/results')
+      return res.data || []
+    },
+    enabled: !!user?.id
+  })
+
+  // Gate: show recommendations only after mentor has graded at least one assessment
+  const hasGradedExam = (examResults || []).some(
+    (r) => r.status === 'Graded' || (r.overridden_score !== null && r.overridden_score !== undefined)
+  )
+
   // Fetch teams
   const { data: teamsData } = useQuery({
     queryKey: ['teams'],
@@ -348,7 +363,13 @@ const StudentDashboard = () => {
               AI Recommendations
             </h2>
           </div>
-          {recLoading ? (
+          {!hasGradedExam ? (
+            <div className="text-center py-12 text-gray-500">
+              <Sparkles className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+              <p className="font-medium text-gray-600">Recommendations not available yet</p>
+              <p className="text-sm mt-1">Complete a skill assessment and wait for your mentor to grade it to unlock project recommendations.</p>
+            </div>
+          ) : recLoading ? (
             <div className="text-center py-12 text-gray-500">Loading recommendations...</div>
           ) : (() => {
             // Show all valid recommendations returned by backend.
@@ -628,15 +649,15 @@ const StudentExamResults = () => {
 
   const latestResultsBySkill = React.useMemo(() => {
     if (!results || results.length === 0) return [];
-    
+
     const bySkill = {};
     results.forEach(r => {
       if (!bySkill[r.skill] || new Date(r.timestamp) > new Date(bySkill[r.skill].timestamp)) {
         bySkill[r.skill] = r;
       }
     });
-    
-    return Object.values(bySkill).sort((a, b) => 
+
+    return Object.values(bySkill).sort((a, b) =>
       new Date(b.timestamp) - new Date(a.timestamp)
     );
   }, [results]);
@@ -652,8 +673,8 @@ const StudentExamResults = () => {
           <CheckCircle className="w-5 h-5 mr-2 text-purple-600" />
           Exam Results
         </h2>
-        <button 
-          onClick={() => refetch()} 
+        <button
+          onClick={() => refetch()}
           className="text-xs text-purple-400 hover:text-purple-300"
         >
           Refresh
