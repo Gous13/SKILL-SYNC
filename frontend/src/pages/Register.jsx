@@ -2,7 +2,16 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
-import { UserPlus } from 'lucide-react'
+import { UserPlus, CheckCircle2, XCircle } from 'lucide-react'
+
+// Password rules for real-time validation
+const PASSWORD_RULES = [
+  { label: 'At least 8 characters', test: (p) => p.length >= 8 },
+  { label: 'One uppercase letter (A-Z)', test: (p) => /[A-Z]/.test(p) },
+  { label: 'One lowercase letter (a-z)', test: (p) => /[a-z]/.test(p) },
+  { label: 'One number (0-9)', test: (p) => /\d/.test(p) },
+  { label: 'One special character (!@#$%...)', test: (p) => /[!@#$%^&*(),.?":{}|<>\-_=+[\]\\/;'`~]/.test(p) },
+]
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -13,6 +22,7 @@ const Register = () => {
     role: 'student'
   })
   const [loading, setLoading] = useState(false)
+  const [showPasswordHints, setShowPasswordHints] = useState(false)
   const { register } = useAuth()
   const navigate = useNavigate()
 
@@ -23,10 +33,24 @@ const Register = () => {
     })
   }
 
+  const passwordRulesStatus = PASSWORD_RULES.map(rule => ({
+    ...rule,
+    passed: rule.test(formData.password)
+  }))
+
+  const allRulesPassed = passwordRulesStatus.every(r => r.passed)
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setLoading(true)
 
+    // Client-side password check before hitting API
+    if (!allRulesPassed) {
+      toast.error('Password does not meet the requirements.')
+      setShowPasswordHints(true)
+      return
+    }
+
+    setLoading(true)
     const result = await register(formData)
     setLoading(false)
 
@@ -41,7 +65,7 @@ const Register = () => {
         navigate('/dashboard')
       }
     } else {
-      toast.error(result.error)
+      toast.error(result.error || 'Registration failed. Please try again.')
     }
   }
 
@@ -126,7 +150,27 @@ const Register = () => {
                 placeholder="Create a strong password"
                 value={formData.password}
                 onChange={handleChange}
+                onFocus={() => setShowPasswordHints(true)}
               />
+              {/* Inline password rule hints - only shown after user focuses the field */}
+              {showPasswordHints && formData.password.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {passwordRulesStatus.map((rule, i) => (
+                    <li
+                      key={i}
+                      className={`flex items-center gap-1.5 text-xs font-medium ${
+                        rule.passed ? 'text-green-600' : 'text-red-500'
+                      }`}
+                    >
+                      {rule.passed
+                        ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        : <XCircle className="w-3.5 h-3.5 shrink-0" />
+                      }
+                      {rule.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div>

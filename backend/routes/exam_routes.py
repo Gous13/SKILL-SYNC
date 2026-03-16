@@ -383,6 +383,7 @@ def edit_result_score(result_id):
     if new_score is not None:
         try:
             result.overridden_score = float(new_score)
+            result.status = 'Graded'  # Mark as mentor-finalized so it appears in leaderboard
         except (ValueError, TypeError):
             return jsonify({'error': 'Invalid score value'}), 400
     
@@ -684,29 +685,121 @@ def get_my_assigned_exams():
 @exam_bp.route('/leaderboard', methods=['GET'])
 @jwt_required()
 def get_leaderboard():
-    """Get exam leaderboard - top scores by skill"""
+    """Get exam leaderboard - top scores by skill or overall"""
     skill = request.args.get('skill')
-    limit = request.args.get('limit', 10, type=int)
+    limit = request.args.get('limit', 50, type=int)
     
-    query = ExamResult.query.filter(
-        ExamResult.status.in_(['COMPLETED', 'Graded'])
-    )
+    from sqlalchemy import func
     
-    if skill:
-        query = query.filter(ExamResult.skill.ilike(skill))
-    
-    results = query.order_by(ExamResult.score.desc()).limit(limit).all()
-    
-    leaderboard = []
-    for idx, r in enumerate(results):
-        final_score = r.overridden_score if r.overridden_score is not None else r.score
-        leaderboard.append({
-            'rank': idx + 1,
-            'user_id': r.user_id,
-            'user_name': r.user.full_name if r.user else 'Unknown',
-            'skill': r.skill,
-            'score': final_score,
-            'timestamp': r.timestamp.isoformat() if r.timestamp else None
-        })
+    if skill == 'overall' or not skill:
+        # Only include MENTOR-GRADED results (status='Graded')
+        # 'COMPLETED' = student submitted but mentor hasn't reviewed yet (excluded)
+        latest_attempts_subquery = db.session.query(
+            ExamResult.user_id,
+            ExamResult.skill,
+            func.max(ExamResult.timestamp).label('max_ts')
+        ).filter(
+            ExamResult.status == 'Graded'
+        ).group_by(ExamResult.user_id, ExamResult.skill).subquery()
+
+        # Step 2: Sum scores of these latest attempts
+        results = db.session.query(
+            ExamResult.user_id,
+            func.sum(func.coalesce(ExamResult.overridden_score, ExamResult.score)).label('total_score'),
+            func.max(ExamResult.timestamp).label('latest_timestamp')
+        ).join(
+            latest_attempts_subquery,
+            (ExamResult.user_id == latest_attempts_subquery.c.user_id) & 
+            (ExamResult.skill == latest_attempts_subquery.c.skill) & 
+            (ExamResult.timestamp == latest_attempts_subquery.c.max_ts)
+        ).group_by(ExamResult.user_id).order_by(func.sum(func.coalesce(ExamResult.overridden_score, ExamResult.score)).desc()).limit(limit).all()
+        
+        leaderboard = []
+        for idx, r in enumerate(results):
+            user = User.query.get(r.user_id)
+            leaderboard.append({
+                'rank': idx + 1,
+                'user_id': r.user_id,
+                'user_name': user.full_name if user else 'Unknown',
+                'skill': 'Overall',
+                'score': round(r.total_score, 1),
+                'timestamp': r.latest_timestamp.isoformat() if r.latest_timestamp else None
+            })
+    else:
+        # Only include MENTOR-GRADED results (status='Graded')
+        subquery = db.session.query(
+            ExamResult.user_id,
+            func.max(ExamResult.timestamp).label('max_ts')
+        ).filter(
+            ExamResult.status == 'Graded',
+            ExamResult.skill.ilike(skill)
+        ).group_by(ExamResult.user_id).subquery()
+        
+        # Step 2: Join and sort by score descending
+        results = ExamResult.query.join(
+            subquery,
+            (ExamResult.user_id == subquery.c.user_id) & (ExamResult.timestamp == subquery.c.max_ts)
+        ).filter(
+            ExamResult.skill.ilike(skill)
+        ).order_by(func.coalesce(ExamResult.overridden_score, ExamResult.score).desc()).limit(limit).all()
+        
+        leaderboard = []
+        for idx, r in enumerate(results):
+            final_score = r.overridden_score if r.overridden_score is not None else r.score
+            leaderboard.append({
+                'rank': idx + 1,
+                'user_id': r.user_id,
+                'user_name': r.user.full_name if r.user else 'Unknown',
+                'skill': r.skill,
+                'score': final_score,
+                'timestamp': r.timestamp.isoformat() if r.timestamp else None
+            })
     
     return jsonify(leaderboard), 200
+
+@exam_bp.route('/skills', methods=['GET'])
+@jwt_required()
+def get_exam_skills():
+    """Get all unique skills from all possible sources for exhaustive filtering"""
+    try:
+        from models.skill_assessment import SkillAssessment
+        from models.exam import ExamQuestion, ExamResult
+        from models.student_skill import StudentSkill
+        
+        all_skills = set()
+        
+        # Helper to safely add skills from query results
+        def add_from_query(query_result):
+            for row in query_result:
+                if row and row[0]:
+                    all_skills.add(row[0].strip())
+
+        try:
+            # Get skills from all relevant tables
+            add_from_query(db.session.query(ExamQuestion.skill).distinct().all())
+            add_from_query(db.session.query(ExamResult.skill).distinct().all())
+            add_from_query(db.session.query(SkillAssessment.skill_name).distinct().all())
+            add_from_query(db.session.query(StudentSkill.skill_name).distinct().all())
+        except Exception as query_err:
+            print(f"Error querying skills: {str(query_err)}")
+            # Continue with whatever we have (or just defaults)
+        
+        # Comprehensive list of industry skills to ensure they are always available
+        popular_skills = [
+            "Java", "C", "C++", "C#", "JavaScript", "Python", "TypeScript", 
+            "PHP", "Ruby", "Go", "Swift", "Kotlin", "Rust",
+            "React", "Angular", "Vue.js", "Node.js", "Express", "Django", "Flask",
+            "SQL", "PostgreSQL", "MongoDB", "Firebase", "AWS", "Docker", "Kubernetes",
+            "Machine Learning", "Data Science", "Artificial Intelligence", "Cybersecurity",
+            "UI/UX Design", "Mobile App Development", "DevOps"
+        ]
+        
+        for sk in popular_skills:
+            all_skills.add(sk)
+            
+        # Filter out empty/null and return sorted unique list
+        result = sorted(list([s for s in all_skills if s]))
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"Critical error in get_exam_skills: {str(e)}")
+        return jsonify({'error': 'Failed to fetch skills'}), 500

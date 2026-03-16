@@ -13,6 +13,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import Messages from './pages/Messages'
 import ExamPage from './pages/ExamPage'
 import ExamMentorPage from './pages/ExamMentorPage'
+import LeaderboardPage from './pages/LeaderboardPage'
 
 const queryClient = new QueryClient()
 
@@ -96,6 +97,14 @@ function App() {
               element={
                 <PrivateRoute requiredRole="mentor">
                   <ExamMentorPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/leaderboard"
+              element={
+                <PrivateRoute>
+                  <LeaderboardPage />
                 </PrivateRoute>
               }
             />

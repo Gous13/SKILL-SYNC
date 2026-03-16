@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 import Layout from '../components/Layout'
 import toast from 'react-hot-toast'
-import { Settings, Users, Briefcase, Activity, BarChart3, RotateCcw, Trash2, Ban, CheckCircle } from 'lucide-react'
+import { Settings, Users, Briefcase, Activity, BarChart3, RotateCcw, Trash2, Ban, CheckCircle, Trophy } from 'lucide-react'
 
 const AdminDashboard = () => {
   const queryClient = useQueryClient()

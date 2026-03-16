@@ -2,6 +2,7 @@
 Authentication routes
 """
 
+import re
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from extensions import db
@@ -10,6 +11,23 @@ from models.analytics import SystemLog
 from datetime import datetime
 
 auth_bp = Blueprint('auth', __name__)
+
+def validate_password_strength(password):
+    """
+    Validate password strength.
+    Returns (is_valid, error_message).
+    """
+    if len(password) < 8:
+        return False, 'Password must be at least 8 characters long.'
+    if not re.search(r'[A-Z]', password):
+        return False, 'Password must contain at least one uppercase letter.'
+    if not re.search(r'[a-z]', password):
+        return False, 'Password must contain at least one lowercase letter.'
+    if not re.search(r'\d', password):
+        return False, 'Password must contain at least one number.'
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>\-_=+\[\]\\\/;\'`~]', password):
+        return False, 'Password must contain at least one special character (e.g. !@#$%^&*).'
+    return True, None
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -20,12 +38,17 @@ def register():
         # Validate required fields
         required_fields = ['email', 'password', 'first_name', 'last_name', 'role']
         for field in required_fields:
-            if field not in data:
+            if not data or field not in data or not str(data[field]).strip():
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Check if user exists
-        if User.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'User with this email already exists'}), 400
+        # Validate password strength BEFORE checking duplicates
+        is_valid, pw_error = validate_password_strength(data['password'])
+        if not is_valid:
+            return jsonify({'error': pw_error}), 400
+        
+        # Check if email is already registered
+        if User.query.filter_by(email=data['email'].lower().strip()).first():
+            return jsonify({'error': 'Email already registered. Please log in or use a different email.'}), 409
         
         # Get or create role
         role = Role.query.filter(db.func.lower(Role.name) == data['role'].lower()).first()
@@ -44,9 +67,9 @@ def register():
         
         # Create user
         user = User(
-            email=data['email'],
-            first_name=data['first_name'],
-            last_name=data['last_name'],
+            email=data['email'].lower().strip(),
+            first_name=data['first_name'].strip(),
+            last_name=data['last_name'].strip(),
             role_id=role.id
         )
         user.set_password(data['password'])
@@ -86,12 +109,16 @@ def login():
         data = request.get_json()
         
         if not data or not data.get('email') or not data.get('password'):
-            return jsonify({'error': 'Email and password required'}), 400
+            return jsonify({'error': 'Email and password are required.'}), 400
         
-        user = User.query.filter_by(email=data['email']).first()
+        # Lookup user by email (case-insensitive)
+        user = User.query.filter(db.func.lower(User.email) == data['email'].lower().strip()).first()
         
-        if not user or not user.check_password(data['password']):
-            return jsonify({'error': 'Invalid email or password'}), 401
+        if not user:
+            return jsonify({'error': 'No account found with this email address.'}), 401
+        
+        if not user.check_password(data['password']):
+            return jsonify({'error': 'Incorrect password. Please try again.'}), 401
         
         if not user.is_active:
             return jsonify({'error': 'Account is deactivated'}), 403

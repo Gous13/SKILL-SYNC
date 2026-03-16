@@ -10,7 +10,6 @@ import {
   User, Plus, Search, Sparkles, Users, Briefcase,
   TrendingUp, Info, CheckCircle, XCircle
 } from 'lucide-react'
-import Leaderboard from '../components/Leaderboard'
 
 const AVAILABILITY_OPTIONS = [
   { value: '', label: 'Select availability' },
@@ -352,8 +351,6 @@ const StudentDashboard = () => {
         {/* Exam Results */}
         {profile && <StudentExamResults />}
 
-        {/* Leaderboard */}
-        {profile && <Leaderboard userRole="student" />}
 
         {/* Modern Recommendations Section */}
         <div className="card">

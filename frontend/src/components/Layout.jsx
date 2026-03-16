@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../services/api'
-import { LogOut, User, LayoutDashboard, Users, Settings, BookOpen, Menu, X } from 'lucide-react'
+import { LogOut, User, LayoutDashboard, Users, Settings, BookOpen, Menu, X, Trophy } from 'lucide-react'
 import NotificationDropdown from './NotificationDropdown'
 
 const Layout = ({ children }) => {
@@ -37,6 +37,7 @@ const Layout = ({ children }) => {
         { path: '/admin', label: 'Admin Dashboard', icon: Settings },
         { path: '/mentor', label: 'Mentor View', icon: Users },
         { path: '/exam-mentor', label: 'Exam Control', icon: BookOpen },
+        { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
         { path: '/dashboard', label: 'Student View', icon: LayoutDashboard },
         { path: '/exam', label: 'Take Exam', icon: BookOpen }
       ]
@@ -44,12 +45,14 @@ const Layout = ({ children }) => {
       return [
         { path: '/mentor', label: 'Mentor Dashboard', icon: Users },
         { path: '/exam-mentor', label: 'Exam Control', icon: BookOpen },
+        { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
         { path: '/dashboard', label: 'Student View', icon: LayoutDashboard },
         { path: '/exam', label: 'Take Exam', icon: BookOpen }
       ]
     } else {
       return [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
         { path: '/exam', label: 'Take Exam', icon: BookOpen }
       ]
     }

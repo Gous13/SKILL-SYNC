@@ -8,7 +8,6 @@ import {
   Plus, Briefcase, Users, Sparkles, Settings, 
   CheckCircle, XCircle, Play, Eye, UsersRound 
 } from 'lucide-react'
-import Leaderboard from '../components/Leaderboard'
 
 const MentorDashboard = () => {
   const queryClient = useQueryClient()
@@ -201,9 +200,6 @@ const MentorDashboard = () => {
                     />
           </div>
         </div>
-
-        {/* Leaderboard */}
-        <Leaderboard userRole="mentor" />
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Deadline</label>
                   <input
