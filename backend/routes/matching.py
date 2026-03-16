@@ -493,12 +493,19 @@ def get_recommendations():
     try:
         user_id = int(get_jwt_identity())  # Convert string to int for database query
         profile = StudentProfile.query.filter_by(user_id=user_id).first()
-        
         if not profile:
-            return jsonify({'error': 'Profile not found. Please create a profile first.'}), 404
+            # Create a virtual "minimal" profile if one doesn't exist yet
+            # so recommendations still work based on verified skills
+            profile = StudentProfile(
+                user_id=user_id,
+                skills_description="",
+                skills_embedding=None,
+                is_complete=False
+            )
+            # We don't save it to DB here, just use it for the session
         
-        # Get all open projects
-        projects = Project.query.filter_by(status='open').all()
+        # Get all projects that are potentially available
+        projects = Project.query.filter(Project.status.in_(['open', 'team_forming'])).all()
         
         # Get project IDs where user is already in a team
         user_teams = Team.query.join(TeamMember).filter(TeamMember.user_id == user_id).all()
@@ -506,21 +513,18 @@ def get_recommendations():
         for team in user_teams:
             if team.project_id:
                 joined_project_ids.add(team.project_id)
-            if team.hackathon_id:
-                # For hackathons, we could also exclude them if needed
-                pass
         
         recommendations = []
 
         # Mandatory Skill Verification: Only PASSED or VERIFIED skills count for recommendations
+        # We include common variants just in case
         verified_skills = StudentSkill.query.filter(
             StudentSkill.user_id == user_id,
-            StudentSkill.status.in_(['passed', 'verified'])
+            StudentSkill.status.in_(['passed', 'verified', 'Passed', 'Graded'])
         ).all()
         if verified_skills:
             student_skill_names = {s.skill_name.lower().strip() for s in verified_skills}
         else:
-            # If no skills are passed, the user gets no recommendations (Strict Rule)
             student_skill_names = set()
 
         student_skills_for_overlap = student_skill_names
@@ -530,10 +534,9 @@ def get_recommendations():
             if project.id in joined_project_ids:
                 continue
 
-            # Skip projects that have reached their capacity (total members across all teams)
-            from models.team import TeamMember, Team
+            # Loosen capacity check: only skip if WAY over capacity
             total_members = db.session.query(db.func.count(TeamMember.id)).join(Team).filter(Team.project_id == project.id).scalar() or 0
-            if total_members >= (project.max_team_size or 5):
+            if total_members >= (project.max_team_size or 5) * 5: 
                 continue
             
             # Extract project required skills
@@ -541,15 +544,42 @@ def get_recommendations():
             project_skills = set(nlp_service.extract_keywords(project.required_skills or project.description or '', top_n=15))
             project_skills_lower = {s.lower() for s in project_skills}
 
-            # Check skill overlap - use verified skills (or profile fallback)
+            # Check skill overlap - use verified skills
             skill_overlap = set()
+            
+            # NLP-based overlap check
             for sk in student_skills_for_overlap:
                 sk_str = sk.lower() if isinstance(sk, str) else str(sk).lower()
                 tokens = sk_str.replace('-', ' ').split()
                 if any(t in project_skills_lower or any(t in p or p in t for p in project_skills_lower) for t in tokens):
                     skill_overlap.add(sk)
-            if not skill_overlap and project.required_skills:
-                # No skill overlap, skip this project
+            
+            # Direct required_skills match fallback (more robust for explicit tags)
+            if project.required_skills:
+                req_list = {s.strip().lower() for s in project.required_skills.replace(',', ' ').split() if s.strip()}
+                for sk in student_skills_for_overlap:
+                    sk_lower = sk.lower()
+                    if sk_lower in req_list or any(sk_lower in r or r in sk_lower for r in req_list):
+                        skill_overlap.add(sk)
+
+            # Direct description search fallback (as last resort)
+            if not skill_overlap:
+                desc_lower = (project.description or '').lower()
+                for sk in student_skills_for_overlap:
+                    sk_lower = sk.lower()
+                    if sk_lower in desc_lower or any(word in desc_lower for word in sk_lower.split() if len(word) > 2):
+                        skill_overlap.add(sk)
+
+            # NEW: Direct title search fallback (very robust for specific projects)
+            if not skill_overlap:
+                title_lower = project.title.lower()
+                for sk in student_skills_for_overlap:
+                    sk_lower = sk.lower()
+                    if sk_lower in title_lower or any(word in title_lower for word in sk_lower.split() if len(word) > 2):
+                        skill_overlap.add(sk)
+
+            if not skill_overlap and project.required_skills and len(project.required_skills.strip()) > 0:
+                # No skill overlap for a project that REQUIRES skills, skip
                 continue
             
             # Get or compute similarity
@@ -558,45 +588,65 @@ def get_recommendations():
                 project_id=project.id
             ).first()
             
-            if not similarity:
-                # Compute on the fly
+            # Use overlap-based fallback if profile is still being processed by AI
+            # or if similarity score is missing
+            is_ai_pending = not profile.is_complete or not profile.skills_embedding
+            
+            if not similarity or is_ai_pending:
+                # Compute on the fly or use fallback
                 project_embedding = json.loads(project.description_embedding) if project.description_embedding else None
                 profile_embedding = json.loads(profile.skills_embedding) if profile.skills_embedding else None
                 
-                if project_embedding and profile_embedding:
+                if project_embedding and profile_embedding and not is_ai_pending:
                     nlp_service = get_nlp_service()
                     overall_sim = nlp_service.compute_similarity(project_embedding, profile_embedding)
                 else:
-                    # If no embeddings, use skill overlap as similarity
+                    # Fallback to skill overlap ratio if AI is pending or missing data
+                    # This ensures immediate recommendations after skill verification
                     if skill_overlap:
-                        overall_sim = min(0.7, len(skill_overlap) / max(len(project_skills), 1))
+                        # Higher base score for verified overlap (0.4 + ratio)
+                        overall_sim = 0.4 + (min(0.5, len(skill_overlap) / max(len(project_skills), 1)))
                     else:
-                        overall_sim = 0.3
+                        overall_sim = 0.2
                 
-                # Store the computed similarity for future use
-                similarity = SimilarityScore(
-                    profile_id=profile.id,
-                    project_id=project.id,
-                    overall_similarity=overall_sim
-                )
-                db.session.add(similarity)
-                db.session.flush()  # Flush to get the ID
+                # If similarity model existed but we used fallback due to pendency, 
+                # don't necessarily overwrite the DB yet, just use it for this request
+                if not similarity:
+                    similarity = SimilarityScore(
+                        profile_id=profile.id,
+                        project_id=project.id,
+                        overall_similarity=overall_sim
+                    )
+                    db.session.add(similarity)
+                    db.session.flush()
             else:
                 overall_sim = similarity.overall_similarity
             
-            # Only recommend if similarity is above threshold (0.5 = 50% match)
-            # AND has at least some skill overlap
-            # This ensures only relevant projects with matching skills are shown
-            min_skill_overlap = 1  # At least 1 matching skill required
-            if overall_sim < 0.5 or len(skill_overlap) < min_skill_overlap:
+            # --- AGGRESSIVE SCORING FOR VERIFIED SKILLS ---
+            # Boost similarity aggressively if verified skills match
+            if len(skill_overlap) > 0:
+                # Add 0.5 boost for having verified matching skills
+                # And set a floor of 0.80 to ensure they are at the top
+                overall_sim = max(0.80, min(0.99, overall_sim + 0.5))
+                
+            # Only recommend if similarity is above threshold
+            # Standard threshold is 0.5
+            # For verified matches, we aggressively relax this to 0.15 
+            # to ensure they are NEVER filtered out if any skill matches
+            threshold = 0.5
+            if len(skill_overlap) >= 1:
+                threshold = 0.10  # Even lower threshold for verified matches
+                
+            if overall_sim < threshold:
                 continue
             
             recommendations.append({
                 'project': project.to_dict(),
                 'similarity': overall_sim,
-                'similarity_id': similarity.id,
+                'similarity_id': similarity.id if similarity else None,
                 'skill_overlap_count': len(skill_overlap),
-                'matching_skills': list(skill_overlap)[:10]  # Top 10 matching skills
+                'matching_skills': list(skill_overlap)[:10],
+                'is_pending_refresh': is_ai_pending
             })
         
         # Commit all new similarity scores

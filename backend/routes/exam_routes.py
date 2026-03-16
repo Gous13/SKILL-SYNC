@@ -1,12 +1,14 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from extensions import db
 from models.exam import ExamQuestion, ExamResult
 from models.student_skill import StudentSkill
+from models.profile import StudentProfile
 from models.user import User
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import json
 from datetime import datetime
 import uuid
+from gevent import spawn
 
 exam_bp = Blueprint('exam', __name__)
 
@@ -25,13 +27,30 @@ def get_questions():
         return jsonify({"error": "Skill required"}), 400
     
     # Get approved questions for this skill (case-insensitive)
-    questions = ExamQuestion.query.filter(
+    all_questions = ExamQuestion.query.filter(
         ExamQuestion.skill.ilike(skill),
         ExamQuestion.status == 'approved'
     ).all()
-    if not questions:
+    
+    if not all_questions:
         return jsonify([])
-    return jsonify([q.to_dict() for q in questions])
+        
+    mcqs = [q for q in all_questions if q.question_type == 'MCQ']
+    coding = [q for q in all_questions if q.question_type == 'Coding']
+    short = [q for q in all_questions if q.question_type == 'Short Answer']
+    
+    selected = []
+    import random
+    
+    # Return 1 MCQ and 1 Coding question (as per user request)
+    if mcqs:
+        selected.append(random.choice(mcqs))
+    if coding:
+        selected.append(random.choice(coding))
+    elif short: # Fallback to short answer if no coding question is available
+        selected.append(random.choice(short))
+        
+    return jsonify([q.to_dict() for q in selected])
 
 @exam_bp.route('/questions/all', methods=['GET'])
 @jwt_required()
@@ -393,9 +412,10 @@ def edit_result_score(result_id):
     db.session.commit()
     
     # Also update the student's skill score
-    student_skill = StudentSkill.query.filter_by(
-        user_id=result.user_id,
-        skill_name=result.skill
+    from sqlalchemy import func
+    student_skill = StudentSkill.query.filter(
+        StudentSkill.user_id == result.user_id,
+        func.lower(StudentSkill.skill_name) == func.lower(result.skill)
     ).first()
     
     if student_skill:
@@ -403,6 +423,30 @@ def edit_result_score(result_id):
         score_value = float(student_skill.assessment_score) if student_skill.assessment_score is not None else 0.0
         student_skill.status = 'passed' if score_value >= 60.0 else 'failed'
         db.session.commit()
+
+        # --- IMPROVEMENT: Sync passed skill to StudentProfile for AI matching ---
+        if student_skill.status == 'passed':
+            profile = StudentProfile.query.filter_by(user_id=result.user_id).first()
+            if profile:
+                skills_desc = profile.skills_description or ""
+                # Check if skill already exists in description (case-insensitive)
+                if result.skill.lower() not in skills_desc.lower():
+                    if skills_desc:
+                        profile.skills_description += f", {result.skill}"
+                    else:
+                        profile.skills_description = result.skill
+                    
+                    # Mark as incomplete to trigger AI refresh
+                    profile.is_complete = False
+                    db.session.commit()
+                    
+                    # Trigger background embedding refresh
+                    try:
+                        from routes.profiles import background_compute_profile_embeddings
+                        app = current_app._get_current_object()
+                        spawn(background_compute_profile_embeddings, app, profile.id)
+                    except ImportError:
+                        pass # Fallback if import fails
     
     return jsonify(result.to_dict()), 200
 
@@ -505,7 +549,12 @@ def submit_exam_attempt(attempt_id):
     score = data.get('score', 0)
     skill_name = data.get('skill')
     if skill_name:
-        student_skill = StudentSkill.query.filter_by(user_id=user_id, skill_name=skill_name).first()
+        from sqlalchemy import func
+        student_skill = StudentSkill.query.filter(
+            StudentSkill.user_id == user_id, 
+            func.lower(StudentSkill.skill_name) == func.lower(skill_name)
+        ).first()
+
         if not student_skill:
             try:
                 student_skill = StudentSkill(user_id=user_id, skill_name=skill_name)
@@ -513,7 +562,10 @@ def submit_exam_attempt(attempt_id):
                 db.session.flush()  # Check for unique constraint violation
             except Exception:
                 db.session.rollback()
-                student_skill = StudentSkill.query.filter_by(user_id=user_id, skill_name=skill_name).first()
+                student_skill = StudentSkill.query.filter(
+                    StudentSkill.user_id == user_id, 
+                    func.lower(StudentSkill.skill_name) == func.lower(skill_name)
+                ).first()
         
         if student_skill:
             student_skill.assessment_score = score
@@ -522,6 +574,30 @@ def submit_exam_attempt(attempt_id):
                 student_skill.status = 'passed' if float(score) >= 60 else 'failed'
             except (ValueError, TypeError):
                 student_skill.status = 'failed'
+
+            # --- IMPROVEMENT: Sync passed skill to StudentProfile for AI matching ---
+            if student_skill.status == 'passed':
+                profile = StudentProfile.query.filter_by(user_id=user_id).first()
+                if profile:
+                    skills_desc = profile.skills_description or ""
+                    # Check if skill already exists in description (case-insensitive)
+                    if skill_name.lower() not in skills_desc.lower():
+                        if skills_desc:
+                            profile.skills_description += f", {skill_name}"
+                        else:
+                            profile.skills_description = skill_name
+                        
+                        # Mark as incomplete to trigger AI refresh
+                        profile.is_complete = False
+                        db.session.commit()
+                        
+                        # Trigger background embedding refresh
+                        try:
+                            from routes.profiles import background_compute_profile_embeddings
+                            app = current_app._get_current_object()
+                            spawn(background_compute_profile_embeddings, app, profile.id)
+                        except ImportError:
+                            pass # Fallback if import fails
 
     db.session.commit()
 

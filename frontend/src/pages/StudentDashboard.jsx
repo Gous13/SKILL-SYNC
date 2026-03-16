@@ -65,7 +65,7 @@ const StudentDashboard = () => {
       const res = await api.get('/matching/recommendations')
       return res.data.recommendations || []
     },
-    enabled: !!profile && !!user?.id
+    enabled: !!user?.id
   })
 
   // Fetch exam results to check if any assessment has been graded by mentor
@@ -78,10 +78,21 @@ const StudentDashboard = () => {
     enabled: !!user?.id
   })
 
+  // Fetch my-skills data to check for any verified skills (for recommendation gate)
+  const { data: skillsData } = useQuery({
+    queryKey: ['my-skills'],
+    queryFn: async () => {
+      const res = await api.get('/skills/my-skills')
+      return res.data.skills || []
+    },
+    enabled: !!user?.id
+  })
+
   // Gate: show recommendations only after mentor has graded at least one assessment
-  const hasGradedExam = (examResults || []).some(
-    (r) => r.status === 'Graded' || (r.overridden_score !== null && r.overridden_score !== undefined)
-  )
+  // OR if the student has any skill with 'passed' or 'verified' status (e.g. MCQ verification)
+  const hasVerifiedSkill = 
+    (examResults || []).some(r => r.status === 'Graded' || (r.overridden_score !== null && r.overridden_score !== undefined)) ||
+    (skillsData || []).some(s => s.status === 'passed' || s.status === 'verified');
 
   // Fetch teams
   const { data: teamsData } = useQuery({
@@ -360,7 +371,7 @@ const StudentDashboard = () => {
               AI Recommendations
             </h2>
           </div>
-          {!hasGradedExam ? (
+          {!hasVerifiedSkill ? (
             <div className="text-center py-12 text-gray-500">
               <Sparkles className="w-8 h-8 mx-auto mb-3 text-gray-300" />
               <p className="font-medium text-gray-600">Recommendations not available yet</p>
@@ -385,7 +396,7 @@ const StudentDashboard = () => {
 
             return (
               <div className="space-y-4">
-                {visibleRecs.slice(0, 5).map((rec) => (
+                {visibleRecs.slice(0, 10).map((rec) => (
                   <ProjectCard
                     key={rec.project.id}
                     recommendation={rec}
