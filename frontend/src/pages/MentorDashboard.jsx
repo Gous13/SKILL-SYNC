@@ -124,7 +124,7 @@ const MentorDashboard = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-400">Teams Formed</p>
                 <p className="text-2xl font-bold text-white">
-                  {projectsData?.reduce((acc, p) => acc + (p.teams?.length || 0), 0) || 0}
+                  {projectsData?.filter(p => (p.teams?.reduce((sum, t) => sum + (t.member_count || 0), 0) || 0) >= p.preferred_team_size).length || 0}
                 </p>
               </div>
             </div>
@@ -339,8 +339,15 @@ const ProjectCard = ({ project, navigate }) => {
   // Count total students who have joined this project
   const totalJoined = project.teams?.reduce((sum, team) => sum + (team.member_count || 0), 0) || 0
   
+  // Border color based on completeness
+  const getStatusBorder = () => {
+    if (totalJoined === 0) return 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.1)]'
+    if (totalJoined < project.preferred_team_size) return 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.1)]'
+    return 'border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.1)]'
+  }
+
   return (
-    <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+    <div className={`border-2 rounded-lg p-4 hover:shadow-lg transition-all duration-300 bg-gray-900 ${getStatusBorder()}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-2">
