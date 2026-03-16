@@ -6,7 +6,7 @@ import Layout from '../components/Layout'
 import toast from 'react-hot-toast'
 import { 
   Plus, Briefcase, Users, Sparkles, Settings, 
-  CheckCircle, XCircle, Play, Eye, UsersRound 
+  CheckCircle, XCircle, Play, Eye, UsersRound, Flame 
 } from 'lucide-react'
 
 const MentorDashboard = () => {
@@ -39,6 +39,16 @@ const MentorDashboard = () => {
       const res = await api.get('/projects/hackathons')
       return res.data.hackathons || []
     }
+  })
+
+  // Fetch student streaks for monitoring
+  const { data: studentStreaks = [] } = useQuery({
+    queryKey: ['student-streaks'],
+    queryFn: async () => {
+      const res = await api.get('/streaks/students')
+      return res.data || []
+    },
+    staleTime: 60000
   })
 
   // Create project mutation
@@ -121,7 +131,78 @@ const MentorDashboard = () => {
           </div>
         </div>
 
-        {/* Create Project Modal */}
+        {/* Student Streak Monitor */}
+        <div className="bg-gray-900 rounded-lg shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 bg-orange-900/30 rounded-lg">
+              <Flame className="w-5 h-5 text-orange-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Student Learning Streaks</h2>
+              <p className="text-xs text-gray-400">Monitor student consistency — view only</p>
+            </div>
+          </div>
+
+          {studentStreaks.length === 0 ? (
+            <p className="text-gray-500 text-sm text-center py-8">No student streak data yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-700 text-[11px] uppercase tracking-widest text-gray-500">
+                    <th className="pb-3 pr-4">Student</th>
+                    <th className="pb-3 pr-4 text-center">Current Streak</th>
+                    <th className="pb-3 pr-4 text-center">Best Streak</th>
+                    <th className="pb-3 pr-4">Last Active</th>
+                    <th className="pb-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {studentStreaks.map((s) => (
+                    <tr key={s.user_id} className="hover:bg-gray-800/40 transition-colors">
+                      <td className="py-3 pr-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-purple-900/40 flex items-center justify-center text-xs font-bold text-purple-300">
+                            {s.user_name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">{s.user_name}</p>
+                            <p className="text-[11px] text-gray-500">{s.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Flame className={`w-4 h-4 ${s.streak_count >= 7 ? 'text-orange-400' : s.streak_count >= 3 ? 'text-amber-400' : 'text-gray-600'}`} />
+                          <span className="text-white font-bold">{s.streak_count}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4 text-center">
+                        <span className="text-gray-400 font-medium">{s.longest_streak}</span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="text-xs text-gray-400">
+                          {s.last_active_date ? new Date(s.last_active_date).toLocaleDateString() : 'Never'}
+                        </span>
+                      </td>
+                      <td className="py-3 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold ${
+                          s.is_active
+                            ? 'bg-green-900/30 text-green-400'
+                            : 'bg-gray-800 text-gray-500'
+                        }`}>
+                          {s.is_active ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                          {s.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {showProjectModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">

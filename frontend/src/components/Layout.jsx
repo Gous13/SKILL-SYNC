@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { api } from '../services/api'
 import { LogOut, User, LayoutDashboard, Users, Settings, BookOpen, Menu, X, Trophy } from 'lucide-react'
 import NotificationDropdown from './NotificationDropdown'
+import StreakDropdown from './StreakDropdown'
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth()
@@ -102,6 +103,7 @@ const Layout = ({ children }) => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              {user?.role === 'student' && <StreakDropdown />}
               <NotificationDropdown unreadCount={unreadCount} />
               <div className="hidden sm:flex items-center space-x-3 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white text-sm font-medium">

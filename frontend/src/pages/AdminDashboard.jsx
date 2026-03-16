@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 import Layout from '../components/Layout'
 import toast from 'react-hot-toast'
-import { Settings, Users, Briefcase, Activity, BarChart3, RotateCcw, Trash2, Ban, CheckCircle, Trophy } from 'lucide-react'
+import { Settings, Users, Briefcase, Activity, BarChart3, RotateCcw, Trash2, Ban, CheckCircle, Trophy, Flame } from 'lucide-react'
 
 const AdminDashboard = () => {
   const queryClient = useQueryClient()
@@ -33,6 +33,16 @@ const AdminDashboard = () => {
       const res = await api.get('/admin/users')
       return res.data.users || []
     }
+  })
+
+  // Streak analytics for admin
+  const { data: streakAnalytics } = useQuery({
+    queryKey: ['streak-analytics'],
+    queryFn: async () => {
+      const res = await api.get('/streaks/analytics')
+      return res.data
+    },
+    staleTime: 60000
   })
 
   const resetProjectsMutation = useMutation({
@@ -220,7 +230,56 @@ const AdminDashboard = () => {
           />
         </div>
 
-        {/* Detailed Stats */}
+        {/* Streak Analytics */}
+        <div className="bg-gray-900 rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-bold text-white mb-5 flex items-center gap-2">
+            <Flame className="w-5 h-5 text-orange-400" />
+            Learning Streak Analytics
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="bg-gray-800 rounded-xl p-4 text-center">
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Highest Streak</p>
+              <div className="flex items-center justify-center gap-1">
+                <Flame className="w-5 h-5 text-orange-400" />
+                <span className="text-3xl font-black text-white">{streakAnalytics?.highest_streak ?? '—'}</span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">days</p>
+            </div>
+            <div className="bg-gray-800 rounded-xl p-4 text-center">
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Avg Streak</p>
+              <span className="text-3xl font-black text-white">{streakAnalytics?.average_streak ?? '—'}</span>
+              <p className="text-[11px] text-gray-500 mt-1">days</p>
+            </div>
+            <div className="bg-gray-800 rounded-xl p-4 text-center">
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Active Today</p>
+              <span className="text-3xl font-black text-green-400">{streakAnalytics?.total_active_students ?? '—'}</span>
+              <p className="text-[11px] text-gray-500 mt-1">students</p>
+            </div>
+          </div>
+          <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Top Streak Leaders</h3>
+          {(!streakAnalytics?.top_students || streakAnalytics.top_students.length === 0) ? (
+            <p className="text-gray-600 text-sm">No streak data yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {streakAnalytics.top_students.map((s, i) => (
+                <div key={s.user_id} className="flex items-center justify-between bg-gray-800 rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+                      i === 0 ? 'bg-yellow-500 text-black' : i === 1 ? 'bg-gray-400 text-black' : i === 2 ? 'bg-amber-700 text-white' : 'bg-gray-700 text-gray-300'
+                    }`}>{i + 1}</span>
+                    <span className="text-sm font-semibold text-white">{s.user_name}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Flame className="w-4 h-4 text-orange-400" />
+                    <span className="text-sm font-bold text-white">{s.streak_count}</span>
+                    <span className="text-xs text-gray-500 ml-1">/ best: {s.longest_streak}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* User Breakdown */}
           <div className="bg-gray-900 rounded-lg shadow-sm p-6">

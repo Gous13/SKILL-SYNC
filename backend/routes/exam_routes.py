@@ -524,8 +524,15 @@ def submit_exam_attempt(attempt_id):
                 student_skill.status = 'failed'
 
     db.session.commit()
-    return jsonify(result.to_dict()), 200
 
+    # Update student daily learning streak
+    try:
+        from routes.streak_routes import update_streak
+        update_streak(int(user_id))
+    except Exception:
+        pass  # Streak failure must never block exam submission
+
+    return jsonify(result.to_dict()), 200
 @exam_bp.route('/attempt/<attempt_id>/terminate', methods=['POST'])
 @jwt_required()
 def terminate_exam_attempt(attempt_id):
